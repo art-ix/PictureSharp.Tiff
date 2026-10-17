@@ -1,0 +1,25 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+TestResults/
+BenchmarkDotNet.Artifacts/
+reference/
+tests/assets/external/
+.claude/settings.local.json
+
+# Local progress log (not committed)
+progres.md
+
+# Public API snapshot written on mismatch
+tests/assets/PublicApi.received.txt
+
+# Packed packages
+*.nupkg
+*.snupkg
+artifacts/
+
+# Python script caches
+__pycache__/
+*.pyc

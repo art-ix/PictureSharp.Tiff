@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PictureSharp.Tiff/PictureSharp.Tiff.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PictureSharp.Tiff.Tests/PictureSharp.Tiff.Tests.csproj" />
+  </Folder>
+</Solution>

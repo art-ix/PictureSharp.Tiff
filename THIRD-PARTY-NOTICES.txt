@@ -1,0 +1,7 @@
+PictureSharp.Tiff third-party notices
+=====================================
+
+PictureSharp.Tiff is licensed under the MIT License (see LICENSE).
+
+No third-party code is included yet. Planned ports and copies, each to be listed here with its license when added:
+the zlib inflate of PictureSharp (zlib and Chromium zlib notices) and parts of libtiff (LZW, predictor, CCITT fax).

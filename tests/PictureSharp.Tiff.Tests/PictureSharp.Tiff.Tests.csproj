@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- TUnit0046 asks for Func<T> data sources for reference-type arguments; the tests never mutate their inputs. -->
+    <NoWarn>$(NoWarn);CA1707;TUnit0046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" Version="1.72.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../assets/PublicApi.approved.txt" Link="PublicApi.approved.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="TUnit.Assertions.Enums" />
+    <ProjectReference Include="..\..\src\PictureSharp.Tiff\PictureSharp.Tiff.csproj" />
+  </ItemGroup>
+
+</Project>

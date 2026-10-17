@@ -1,0 +1,52 @@
+# Publishing a GitHub Release builds, tests and packs the plugin, pushes it to nuget.org (Trusted Publishing, no stored
+# API key) and attaches the package to the release.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # upload the .nupkg to the release
+  id-token: write # OIDC token for NuGet Trusted Publishing
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-24.04
+    environment: nuget
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Check tag matches VERSION
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match VERSION ${version}" >&2
+            exit 1
+          fi
+
+      - run: dotnet build -c Release
+      - run: dotnet test -c Release --no-build
+      - run: dotnet pack src/PictureSharp.Tiff -c Release --no-build -o artifacts
+
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - run: gh release upload "${GITHUB_REF_NAME}" artifacts/*.nupkg --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
