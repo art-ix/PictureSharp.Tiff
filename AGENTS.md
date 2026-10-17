@@ -13,11 +13,10 @@ in PictureSharp itself go to the core repository's `plan.md` (sibling folder `..
 
 - Target `net10.0` with C# 14 (`LangVersion=14.0`); support .NET 10 and later.
 - `src/PictureSharp.Tiff` depends only on the `PictureSharp` package (minimum version in `Directory.Build.props`) and
-  the BCL: no other `PackageReference`, native libraries, P/Invoke or `System.IO.Compression`. Use only public
-  PictureSharp API; no `InternalsVisibleTo` or reflection. An architecture test checks this.
-- One deliberate exception, decided by the user: Deflate needs zlib inflate, so `Compression/` will hold a copy of the
-  core's `Inflater`, Huffman tables and `Adler32`, kept in sync by `scripts/sync-compression.sh` (with `--check` in
-  CI). Copy nothing else from the core.
+  the BCL: no other `PackageReference`, native libraries or P/Invoke. Use only public PictureSharp API; no
+  `InternalsVisibleTo` or reflection. An architecture test checks this.
+- Deflate uses `System.IO.Compression.ZLibStream` (decided by the user on 2026-10-17: it ships with the runtime on
+  every platform). Copy no code from the core.
 - Do not use the `unsafe` keyword. Use `Span<T>`, `ref`, `Unsafe.Add` and `MemoryMarshal`.
 - Public API uses `PictureSharp.Formats.Tiff` (`TiffFormat`, `ImageFormat.Tiff`); codecs are `internal`.
 - Return `Image` pixels as `Rgba32` with straight alpha; reduce deeper samples to 8 bits with documented rounding.

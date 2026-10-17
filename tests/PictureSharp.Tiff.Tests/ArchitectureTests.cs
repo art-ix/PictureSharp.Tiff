@@ -17,7 +17,6 @@ public sealed class ArchitectureTests
         string[] references = [.. Plugin.GetReferencedAssemblies().Select(a => a.Name!)];
         await Assert.That(references.Where(name => name != "PictureSharp" && !IsRuntime(name))).IsEmpty();
         await Assert.That(references).Contains("PictureSharp");
-        await Assert.That(references.Where(name => name.StartsWith("System.IO.Compression", StringComparison.Ordinal))).IsEmpty();
         await Assert.That(Plugin.GetCustomAttributes<InternalsVisibleToAttribute>()).IsEmpty();
     }
 

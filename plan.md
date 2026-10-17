@@ -2,8 +2,8 @@
 
 Wtyczka TIFF (tylko odczyt) dla PictureSharp, wydzielona z `PictureSharp.Formats.Extra` (decyzja użytkownika
 z 2026-10-17). Osobne repozytorium i własny SemVer, jak `PictureSharp.Heif`. Zależność wyłącznie od publicznego pakietu
-`PictureSharp` (minimum 0.7.1). Jedyny wyjątek od zasady „bez kopii kodu rdzenia”: kopia dekompresji zlib
-synchronizowana skryptem.
+`PictureSharp` (minimum 0.7.1), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
+użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia).
 
 **Status: prace nad formatem wstrzymane.** Wersja 0.1.0 to szkielet projektu.
 
@@ -24,8 +24,8 @@ Szkieletu 0.1.0 nie należy publikować na NuGet: pakiet rozpoznaje TIFF, ale go
 - Pierwsza strona w pełnej rozdzielczości (pomija IFD z bitem reduced-resolution w `NewSubfileType`); `Identify`
   zwraca `ContainerItemCount` = liczba stron, `FrameCount` = 1.
 - Kompresja: None, PackBits, LZW (MSB-first z „early change” i zgodność ze starym LZW LSB-first wg libtiff
-  `tif_lzw.c`), Deflate 8/32946 (kopia `Inflater` rdzenia z limitem wyjścia = oczekiwany rozmiar paska,
-  `scripts/sync-compression.sh` z `--check` w CI).
+  `tif_lzw.c`), Deflate 8/32946 (`ZLibStream` z limitem wyjścia = oczekiwany rozmiar paska; nadmiar lub
+  uszkodzony strumień → `ImageFormatException`).
 - Predyktor 2 (8/16 bit). Fotometria: WhiteIsZero/BlackIsZero (1/2/4/8/16 bit), RGB(A) 8/16, Palette (1/2/4/8),
   `ExtraSamples` (associated → unpremultiply, unassociated wprost).
 - Metadane: ICC (34675), XMP (700), `Orientation` (274) → `Metadata.Orientation`, rozdzielczość (282/283/296); limity
