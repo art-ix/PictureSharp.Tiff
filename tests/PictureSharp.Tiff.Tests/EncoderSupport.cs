@@ -7,11 +7,23 @@ namespace PictureSharp.Formats.Tiff.Tests;
 /// <summary>Source images for the encoder tests and the pixels each colour type should read back as.</summary>
 internal static class EncoderSupport
 {
-    public static TiffEncoderOptions Options(TiffColorType colorType = TiffColorType.Auto, int rowsPerStrip = 0) =>
-        new() { ColorType = colorType, RowsPerStrip = rowsPerStrip, Configuration = TestSupport.Configuration };
+    /// <summary>Encoder options; unlike the encoder's default, uncompressed unless <paramref name="compression"/> says otherwise.</summary>
+    public static TiffEncoderOptions Options(TiffColorType colorType = TiffColorType.Auto, int rowsPerStrip = 0,
+        TiffCompression compression = TiffCompression.None, TiffPredictor predictor = TiffPredictor.Auto) =>
+        new()
+        {
+            ColorType = colorType,
+            RowsPerStrip = rowsPerStrip,
+            Compression = compression,
+            Predictor = predictor,
+            Configuration = TestSupport.Configuration,
+        };
 
-    /// <summary>A deterministic gradient; <paramref name="gray"/> makes R = G = B, <paramref name="alpha"/> varies A.</summary>
-    public static Image Pattern(int width, int height, bool gray = false, bool alpha = false)
+    /// <summary>
+    /// A deterministic gradient; <paramref name="gray"/> makes R = G = B, <paramref name="alpha"/> varies A and
+    /// <paramref name="posterize"/> keeps the top 3, 3 and 2 bits of R, G and B (at most 256 colours).
+    /// </summary>
+    public static Image Pattern(int width, int height, bool gray = false, bool alpha = false, bool posterize = false)
     {
         var image = new Image(width, height);
         Span<Rgba32> pixels = image.GetPixelSpan();
@@ -21,8 +33,28 @@ internal static class EncoderSupport
             {
                 byte r = (byte)((x * 37) + (y * 11)), g = (byte)((x * 5) + (y * 53)), b = (byte)((x * x) + (y * 3));
                 byte a = alpha ? (byte)((x * 29) + (y * 17)) : (byte)255;
+                if (posterize)
+                {
+                    (r, g, b) = ((byte)(r & 0xE0), (byte)(g & 0xE0), (byte)(b & 0xC0));
+                }
+
                 pixels[(y * width) + x] = gray ? new Rgba32(r, r, r, a) : new Rgba32(r, g, b, a);
             }
+        }
+
+        return image;
+    }
+
+    /// <summary>Opaque random pixels from a fixed seed; <paramref name="gray"/> makes R = G = B.</summary>
+    public static Image Noise(int width, int height, bool gray = false)
+    {
+        var image = new Image(width, height);
+        var random = new Random(width * height);
+        Span<Rgba32> pixels = image.GetPixelSpan();
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            byte r = (byte)random.Next(256), g = (byte)random.Next(256), b = (byte)random.Next(256);
+            pixels[i] = gray ? new Rgba32(r, r, r, 255) : new Rgba32(r, g, b, 255);
         }
 
         return image;
@@ -40,7 +72,7 @@ internal static class EncoderSupport
             {
                 TiffColorType.Grayscale => new Rgba32(gray, gray, gray, 255),
                 TiffColorType.GrayscaleAlpha => new Rgba32(gray, gray, gray, p.A),
-                TiffColorType.Rgb => p with { A = 255 },
+                TiffColorType.Rgb or TiffColorType.Palette => p with { A = 255 },
                 _ => p,
             };
         }

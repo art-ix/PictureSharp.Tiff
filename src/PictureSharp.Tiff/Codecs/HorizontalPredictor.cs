@@ -42,4 +42,19 @@ internal static class HorizontalPredictor
             }
         }
     }
+
+    /// <summary>Applies the differencing to 8-bit samples, row by row; the inverse of <see cref="Decode"/>.</summary>
+    // port: libtiff/tif_predict.c PredictorEncodeTile with horDiff8. Each sample loses the original sample to its
+    // left, so the row is walked from the end.
+    public static void Encode8(Span<byte> chunk, int rowBytes, int stride)
+    {
+        for (int start = 0; start < chunk.Length; start += rowBytes)
+        {
+            Span<byte> row = chunk.Slice(start, rowBytes);
+            for (int i = row.Length - 1; i >= stride; i--)
+            {
+                row[i] -= row[i - stride];
+            }
+        }
+    }
 }

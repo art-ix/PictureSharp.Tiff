@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1 (writer foundation) done
-locally. Next: 0.4.2 lossless compression; writing is released as 0.5.0.**
+**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1 (writer foundation) and
+0.4.2 (lossless compression, palette) done locally. Next: 0.4.3 JPEG and CCITT Group 4; writing is released as 0.5.0.**
 
 ## Versions
 
@@ -17,7 +17,7 @@ locally. Next: 0.4.2 lossless compression; writing is released as 0.5.0.**
 | 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Released in 0.4.0 |
 | 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
-| 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Planned, local |
+| 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Planned, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Planned, local |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
@@ -125,6 +125,24 @@ corpus, 618 tests.
 - DoD: all compressions × colour types × predictor through the oracles; LZW and PackBits byte-identical to libtiff
   4.5.1 on the same pixels and strip size (written through ctypes); compression ratio within 2% of libtiff for LZW and
   PackBits on the corpus; worst-case inputs (random noise, single colour) stay within the libtiff expansion bounds.
+
+- Done 2026-10-21. Decisions and deviations:
+  - `TiffPredictor` enum (`Auto`, `None`, `Horizontal`) instead of a bare value: `Auto` is horizontal for LZW and
+    Deflate except palette images. Explicit `Horizontal` with None or PackBits throws `ArgumentException` at save
+    (options are validated per property, the combination only when encoding). `DeflateLevel` is 0–9 (default 6, as
+    `PngEncoderOptions.CompressionLevel`), passed to `ZLibCompressionOptions`.
+  - Palette is 8-bit with a 256-entry colour map (unused entries black), colours in order of first appearance; explicit
+    `Palette` drops alpha and throws `InvalidOperationException` beyond 256 colours, as the PNG encoder. `Auto` picks a
+    palette only for opaque colour images with at most 256 colours and more than 768 pixels, below which the 1.5 KiB
+    colour map makes the file larger than RGB. Smaller palettes (1, 2, 4 bits) are not written.
+  - The 4 GiB check is exact before writing for None; compressed strips are checked as they are written, so an
+    oversized compressed image throws `NotSupportedException` after part of the output (BigTIFF comes in 0.5.0).
+  - Oracles: 16 new snapshots (28 in all; Deflate files are kept for the script but not compared bytewise);
+    `verify_written.py` also re-encodes the decoded strips of LZW and PackBits files with libtiff
+    (`TIFFWriteEncodedStrip`) and requires identical raw strips. `Corpus_RoundTripsWithEveryCompression` writes every
+    corpus image with PackBits, LZW and Deflate to `written.corpus/`: 273/273 files pass Pillow and libtiff, and all
+    LZW and PackBits strips equal libtiff's (so the compression ratio is libtiff's exactly). Noise and single-colour
+    inputs are covered by snapshots and `WorstCaseInputs_RoundTrip`. 1100 tests.
 
 ### 0.4.3 — JPEG and CCITT Group 4
 

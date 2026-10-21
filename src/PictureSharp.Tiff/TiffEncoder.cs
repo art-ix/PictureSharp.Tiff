@@ -1,12 +1,14 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using PictureSharp.Formats.Tiff.Codecs;
 using PictureSharp.Formats.Tiff.Container;
 
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// Writes the first frame as a little-endian classic TIFF: the header, the strips, then the IFD. A seekable stream gets
+/// Writes the first frame as a little-endian classic TIFF: the header, the strips (each packed, differenced and
+/// compressed in turn), then the IFD. A seekable stream gets
 /// the header's IFD offset patched after the data; any other stream gets the strips spooled first, with the same bytes.
 /// </summary>
 internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
@@ -15,6 +17,9 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private const string Software = "PictureSharp.Tiff";
     private const ushort PhotometricMinIsBlack = 1;
     private const ushort PhotometricRgb = 2;
+    private const ushort PhotometricPalette = 3;
+    private const ushort PredictorHorizontal = 2;
+    private const int PaletteMinPixels = 768;
     private const ushort UnassociatedAlpha = 2;
     private const ushort ResolutionUnitInch = 2;
 
@@ -30,15 +35,31 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new ArgumentException("The stream must be writable.", nameof(output));
         }
 
+        TiffCompression compression = options.Compression;
+        if (options.Predictor == TiffPredictor.Horizontal && compression is TiffCompression.None or TiffCompression.PackBits)
+        {
+            throw new ArgumentException("The horizontal predictor applies only to LZW and Deflate compression.", nameof(options));
+        }
+
         ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan();
-        TiffColorType colorType = options.ColorType == TiffColorType.Auto ? Choose(pixels) : options.ColorType;
+        Dictionary<uint, byte>? palette = null;
+        TiffColorType colorType = options.ColorType == TiffColorType.Auto ? Choose(pixels, out palette) : options.ColorType;
+        if (colorType == TiffColorType.Palette && palette is null)
+        {
+            palette = TiffSamplePacker.Palette(pixels)
+                ?? throw new InvalidOperationException("The image has more than 256 colours and cannot be saved as a palette TIFF.");
+        }
+
         int samplesPerPixel = colorType switch
         {
-            TiffColorType.Grayscale => 1,
+            TiffColorType.Grayscale or TiffColorType.Palette => 1,
             TiffColorType.GrayscaleAlpha => 2,
             TiffColorType.Rgb => 3,
             _ => 4,
         };
+        bool horizontal = options.Predictor == TiffPredictor.Horizontal
+            || (options.Predictor == TiffPredictor.Auto && compression is TiffCompression.Lzw or TiffCompression.Deflate
+                && colorType != TiffColorType.Palette);
 
         int width = image.Width, height = image.Height;
         long rowBytes = (long)width * samplesPerPixel;
@@ -48,13 +69,22 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         int strips = (int)(((long)height + rowsPerStrip - 1) / rowsPerStrip);
         var offsets = new uint[strips];
         var counts = new uint[strips];
-        byte[]? icc = (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null;
-        byte[]? xmp = (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null;
+        var layout = new Layout(colorType, samplesPerPixel, compression, horizontal, rowsPerStrip, palette,
+            (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null,
+            (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null);
 
-        // Classic TIFF addresses 4 GiB; the IFD size does not depend on the offsets, so the check precedes any output.
-        long dataEnd = 8 + (rowBytes * height);
-        long fileSize = Align(dataEnd) + Ifd(image, colorType, samplesPerPixel, rowsPerStrip, offsets, counts, icc, xmp).Size;
-        if (rowBytes * rowsPerStrip > Array.MaxLength || fileSize > uint.MaxValue)
+        // Classic TIFF addresses 4 GiB. The IFD size does not depend on the offsets, so uncompressed output is checked
+        // before any output; compressed strips are checked as they are written.
+        long stripBytes = rowBytes * rowsPerStrip;
+        long bound = compression switch
+        {
+            TiffCompression.PackBits => PackBitsEncoder.MaxLength(stripBytes),
+            TiffCompression.Lzw => LzwEncoder.MaxLength(stripBytes),
+            _ => stripBytes,
+        };
+        int ifdSize = Ifd(image, layout, offsets, counts).Size;
+        if (bound > Array.MaxLength
+            || (compression == TiffCompression.None && Align(8 + (rowBytes * height)) + ifdSize > uint.MaxValue))
         {
             throw new NotSupportedException("The TIFF file would exceed 4 GiB, which classic TIFF cannot address.");
         }
@@ -67,20 +97,49 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             output.Write(Header(0));
         }
 
-        byte[] strip = ArrayPool<byte>.Shared.Rent((int)(rowBytes * rowsPerStrip));
+        byte[] strip = ArrayPool<byte>.Shared.Rent((int)stripBytes);
+        byte[]? packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)bound) : null;
+        LzwEncoder? lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
+        using DeflateEncoder? deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
+        long position = 8;
         try
         {
-            uint position = 8;
             for (int s = 0; s < strips; s++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 int y0 = s * rowsPerStrip, rows = Math.Min(rowsPerStrip, height - y0);
+                Span<byte> samples = strip.AsSpan(0, (int)(rows * rowBytes));
                 for (int y = 0; y < rows; y++)
                 {
-                    TiffSamplePacker.Pack(pixels.Slice((y0 + y) * width, width), strip.AsSpan((int)(y * rowBytes), (int)rowBytes), samplesPerPixel);
+                    ReadOnlySpan<Rgba32> row = pixels.Slice((y0 + y) * width, width);
+                    Span<byte> target = samples.Slice((int)(y * rowBytes), (int)rowBytes);
+                    if (palette is null)
+                    {
+                        TiffSamplePacker.Pack(row, target, samplesPerPixel);
+                    }
+                    else
+                    {
+                        TiffSamplePacker.PackIndices(row, target, palette);
+                    }
                 }
 
-                ReadOnlySpan<byte> data = strip.AsSpan(0, (int)(rows * rowBytes));
+                if (horizontal)
+                {
+                    HorizontalPredictor.Encode8(samples, (int)rowBytes, samplesPerPixel);
+                }
+
+                ReadOnlySpan<byte> data = compression switch
+                {
+                    TiffCompression.PackBits => packed.AsSpan(0, PackBitsEncoder.Encode(samples, (int)rowBytes, packed)),
+                    TiffCompression.Lzw => packed.AsSpan(0, lzw!.Encode(samples, packed)),
+                    TiffCompression.Deflate => deflate!.Encode(samples),
+                    _ => samples,
+                };
+                if (Align(position + data.Length) + ifdSize > uint.MaxValue)
+                {
+                    throw new NotSupportedException("The TIFF file would exceed 4 GiB, which classic TIFF cannot address.");
+                }
+
                 if (spool is null)
                 {
                     output.Write(data);
@@ -90,25 +149,29 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                     spool.Write(data);
                 }
 
-                offsets[s] = position;
+                offsets[s] = (uint)position;
                 counts[s] = (uint)data.Length;
-                position += (uint)data.Length;
+                position += data.Length;
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(strip);
+            if (packed is not null)
+            {
+                ArrayPool<byte>.Shared.Return(packed);
+            }
         }
 
-        uint ifdOffset = (uint)Align(dataEnd);
-        byte[] ifd = Ifd(image, colorType, samplesPerPixel, rowsPerStrip, offsets, counts, icc, xmp).ToArray(ifdOffset);
+        uint ifdOffset = (uint)Align(position);
+        byte[] ifd = Ifd(image, layout, offsets, counts).ToArray(ifdOffset);
         if (spool is not null)
         {
             output.Write(Header(ifdOffset));
             spool.CopyTo(output);
         }
 
-        if (ifdOffset != dataEnd)
+        if (ifdOffset != position)
         {
             output.WriteByte(0);
         }
@@ -125,9 +188,13 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         }
     }
 
-    /// <summary>The smallest lossless type: alpha only when a pixel is not opaque, grey when every pixel has R = G = B.</summary>
-    private static TiffColorType Choose(ReadOnlySpan<Rgba32> pixels)
+    /// <summary>
+    /// The smallest lossless type: grey when every pixel has R = G = B, else a palette when the image is opaque, has at
+    /// most 256 colours and enough pixels to outweigh the colour map, else RGB; alpha only when a pixel is not opaque.
+    /// </summary>
+    private static TiffColorType Choose(ReadOnlySpan<Rgba32> pixels, out Dictionary<uint, byte>? palette)
     {
+        palette = null;
         bool alpha = false, gray = true;
         foreach (Rgba32 p in pixels)
         {
@@ -135,28 +202,43 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             gray &= p.R == p.G && p.G == p.B;
         }
 
+        if (!gray && !alpha && pixels.Length > PaletteMinPixels)
+        {
+            palette = TiffSamplePacker.Palette(pixels);
+        }
+
         return (gray, alpha) switch
         {
             (true, false) => TiffColorType.Grayscale,
             (true, true) => TiffColorType.GrayscaleAlpha,
-            (false, false) => TiffColorType.Rgb,
+            (false, false) => palette is null ? TiffColorType.Rgb : TiffColorType.Palette,
             _ => TiffColorType.Rgba,
         };
     }
 
-    private static TiffIfdWriter Ifd(Image image, TiffColorType colorType, int samplesPerPixel, int rowsPerStrip,
-        uint[] offsets, uint[] counts, byte[]? icc, byte[]? xmp)
+    private static TiffIfdWriter Ifd(Image image, Layout layout, uint[] offsets, uint[] counts)
     {
         var ifd = new TiffIfdWriter();
         ifd.AddLong(TiffTag.ImageWidth, (uint)image.Width);
         ifd.AddLong(TiffTag.ImageLength, (uint)image.Height);
         Span<ushort> bits = [8, 8, 8, 8];
-        ifd.AddShort(TiffTag.BitsPerSample, bits[..samplesPerPixel]);
-        ifd.AddShort(TiffTag.Compression, 1);
-        ifd.AddShort(TiffTag.Photometric, samplesPerPixel <= 2 ? PhotometricMinIsBlack : PhotometricRgb);
+        ifd.AddShort(TiffTag.BitsPerSample, bits[..layout.SamplesPerPixel]);
+        ifd.AddShort(TiffTag.Compression, layout.Compression switch
+        {
+            TiffCompression.PackBits => (ushort)32773,
+            TiffCompression.Lzw => (ushort)5,
+            TiffCompression.Deflate => (ushort)8,
+            _ => (ushort)1,
+        });
+        ifd.AddShort(TiffTag.Photometric, layout.ColorType switch
+        {
+            TiffColorType.Palette => PhotometricPalette,
+            TiffColorType.Rgb or TiffColorType.Rgba => PhotometricRgb,
+            _ => PhotometricMinIsBlack,
+        });
         ifd.AddLong(TiffTag.StripOffsets, offsets);
-        ifd.AddShort(TiffTag.SamplesPerPixel, (ushort)samplesPerPixel);
-        ifd.AddLong(TiffTag.RowsPerStrip, (uint)rowsPerStrip);
+        ifd.AddShort(TiffTag.SamplesPerPixel, (ushort)layout.SamplesPerPixel);
+        ifd.AddLong(TiffTag.RowsPerStrip, (uint)layout.RowsPerStrip);
         ifd.AddLong(TiffTag.StripByteCounts, counts);
         (uint x, uint xDenominator) = Rational(image.Metadata.HorizontalResolution);
         (uint y, uint yDenominator) = Rational(image.Metadata.VerticalResolution);
@@ -165,22 +247,47 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         ifd.AddShort(TiffTag.PlanarConfiguration, 1);
         ifd.AddShort(TiffTag.ResolutionUnit, ResolutionUnitInch);
         ifd.AddAscii(TiffTag.Software, Software);
-        if (colorType is TiffColorType.GrayscaleAlpha or TiffColorType.Rgba)
+        if (layout.Horizontal)
+        {
+            ifd.AddShort(TiffTag.Predictor, PredictorHorizontal);
+        }
+
+        if (layout.Palette is not null)
+        {
+            ifd.AddShort(TiffTag.ColorMap, ColorMap(layout.Palette));
+        }
+
+        if (layout.ColorType is TiffColorType.GrayscaleAlpha or TiffColorType.Rgba)
         {
             ifd.AddShort(TiffTag.ExtraSamples, UnassociatedAlpha);
         }
 
-        if (xmp is { Length: > 0 })
+        if (layout.Xmp is { Length: > 0 })
         {
-            ifd.AddBytes(TiffTag.Xmp, TiffEntry.Byte, xmp);
+            ifd.AddBytes(TiffTag.Xmp, TiffEntry.Byte, layout.Xmp);
         }
 
-        if (icc is { Length: > 0 })
+        if (layout.Icc is { Length: > 0 })
         {
-            ifd.AddBytes(TiffTag.IccProfile, TiffEntry.Undefined, icc);
+            ifd.AddBytes(TiffTag.IccProfile, TiffEntry.Undefined, layout.Icc);
         }
 
         return ifd;
+    }
+
+    /// <summary>The 256 red, then green, then blue values of the palette, scaled to 16 bits; unused entries are black.</summary>
+    private static ushort[] ColorMap(Dictionary<uint, byte> palette)
+    {
+        var map = new ushort[3 * 256];
+        foreach ((uint packed, byte index) in palette)
+        {
+            Rgba32 color = MemoryMarshal.Cast<uint, Rgba32>(new ReadOnlySpan<uint>(in packed))[0];
+            map[index] = (ushort)(color.R * 257);
+            map[256 + index] = (ushort)(color.G * 257);
+            map[512 + index] = (ushort)(color.B * 257);
+        }
+
+        return map;
     }
 
     private static byte[] Header(uint ifdOffset)
@@ -216,4 +323,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     }
 
     private static long Align(long offset) => (offset + 1) & ~1L;
+
+    private sealed record Layout(TiffColorType ColorType, int SamplesPerPixel, TiffCompression Compression, bool Horizontal,
+        int RowsPerStrip, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp);
 }

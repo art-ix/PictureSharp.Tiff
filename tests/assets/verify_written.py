@@ -8,6 +8,9 @@ the straight 8-bit RGBA our decoder reads, the resolution in dots per inch and t
 Pillow must read the same pixels and metadata. libtiff must open the file without a warning or an error, return the
 same ICC profile, and convert it with TIFFReadRGBAImage to the same pixels. libtiff premultiplies RGB with unassociated
 alpha, (a * v + 127) / 255 as its UaToAa table computes, but passes grey with alpha through (putagreytile).
+
+For LZW and PackBits files, libtiff also writes the decoded strips again with the same layout, compression and
+predictor (TIFFWriteEncodedStrip); its raw strips must equal ours byte for byte.
 """
 
 import ctypes
@@ -15,6 +18,7 @@ import hashlib
 import json
 import os
 import sys
+import tempfile
 
 import numpy as np
 from PIL import Image
@@ -25,10 +29,28 @@ lib.TIFFOpen.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
 lib.TIFFClose.argtypes = [ctypes.c_void_p]
 lib.TIFFGetField.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
 lib.TIFFReadRGBAImageOriented.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+lib.TIFFGetFieldDefaulted.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+lib.TIFFSetField.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+lib.TIFFNumberOfStrips.argtypes = [ctypes.c_void_p]
+lib.TIFFNumberOfStrips.restype = ctypes.c_uint32
+lib.TIFFStripSize.argtypes = [ctypes.c_void_p]
+lib.TIFFStripSize.restype = ctypes.c_int64
+lib.TIFFRawStripSize.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+lib.TIFFRawStripSize.restype = ctypes.c_int64
+lib.TIFFReadEncodedStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int64]
+lib.TIFFReadEncodedStrip.restype = ctypes.c_int64
+lib.TIFFReadRawStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int64]
+lib.TIFFReadRawStrip.restype = ctypes.c_int64
+lib.TIFFWriteEncodedStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int64]
+lib.TIFFWriteEncodedStrip.restype = ctypes.c_int64
 
-IMAGEWIDTH, IMAGELENGTH, XMLPACKET, ICCPROFILE = 256, 257, 700, 34675
+IMAGEWIDTH, IMAGELENGTH, BITSPERSAMPLE, COMPRESSION, PHOTOMETRIC = 256, 257, 258, 259, 262
+SAMPLESPERPIXEL, ROWSPERSTRIP, PLANARCONFIG, PREDICTOR, EXTRASAMPLES = 277, 278, 284, 317, 338
+XMLPACKET, ICCPROFILE = 700, 34675
+LZW, DEFLATE, PACKBITS = 5, 8, 32773
 
 messages = []
+totals = {LZW: 0, PACKBITS: 0}
 HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p)
 
 
@@ -50,6 +72,60 @@ def get_u32(tif, tag):
     if not lib.TIFFGetField(tif, tag, ctypes.byref(value)):
         raise RuntimeError(f"tag {tag} missing")
     return value.value
+
+
+def get_u16(tif, tag, default=None):
+    value = ctypes.c_uint16()
+    if not lib.TIFFGetFieldDefaulted(tif, tag, ctypes.byref(value)):
+        if default is None:
+            raise RuntimeError(f"tag {tag} missing")
+        return default
+    return value.value
+
+
+def read_strips(path, raw):
+    """The strips of a file, raw or decoded, and the file's layout."""
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    if not tif:
+        raise RuntimeError("TIFFOpen failed")
+    try:
+        # Predictor is known only to the codecs that use it.
+        layout = {tag: get_u16(tif, tag) for tag in (BITSPERSAMPLE, COMPRESSION, SAMPLESPERPIXEL)}
+        layout[PREDICTOR] = get_u16(tif, PREDICTOR, default=1) if layout[COMPRESSION] in (LZW, DEFLATE) else 1
+        layout.update({tag: get_u32(tif, tag) for tag in (IMAGEWIDTH, IMAGELENGTH, ROWSPERSTRIP)})
+        strips = []
+        for s in range(lib.TIFFNumberOfStrips(tif)):
+            size = lib.TIFFRawStripSize(tif, s) if raw else lib.TIFFStripSize(tif)
+            buf = ctypes.create_string_buffer(size)
+            n = (lib.TIFFReadRawStrip if raw else lib.TIFFReadEncodedStrip)(tif, s, buf, size)
+            if n < 0:
+                raise RuntimeError(f"strip {s} unreadable")
+            strips.append(buf.raw[:n])
+        return layout, strips
+    finally:
+        lib.TIFFClose(tif)
+
+
+def libtiff_reencode(path, layout, strips):
+    """The raw strips libtiff writes for the decoded strips with the same layout, compression and predictor."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_path = os.path.join(tmp, "libtiff.tif")
+        tif = lib.TIFFOpen(out_path.encode(), b"w")
+        spp = layout[SAMPLESPERPIXEL]
+        for tag in (IMAGEWIDTH, IMAGELENGTH, ROWSPERSTRIP):
+            lib.TIFFSetField(tif, tag, ctypes.c_uint32(layout[tag]))
+        for tag, value in ((BITSPERSAMPLE, layout[BITSPERSAMPLE]), (SAMPLESPERPIXEL, spp), (PLANARCONFIG, 1),
+                           (PHOTOMETRIC, 1 if spp <= 2 else 2), (COMPRESSION, layout[COMPRESSION])):
+            lib.TIFFSetField(tif, tag, ctypes.c_int(value))
+        if layout[PREDICTOR] != 1:
+            lib.TIFFSetField(tif, PREDICTOR, ctypes.c_int(layout[PREDICTOR]))
+        if spp in (2, 4):
+            lib.TIFFSetField(tif, EXTRASAMPLES, ctypes.c_int(1), ctypes.byref(ctypes.c_uint16(2)))
+        for s, data in enumerate(strips):
+            if lib.TIFFWriteEncodedStrip(tif, s, data, len(data)) < 0:
+                raise RuntimeError(f"libtiff could not write strip {s}")
+        lib.TIFFClose(tif)
+        return read_strips(out_path, raw=True)[1]
 
 
 def get_blob(tif, tag):
@@ -110,6 +186,17 @@ def verify(path, entry):
         errors.append("libtiff ICC differs")
     if sha(xmp) != entry["xmp"]:
         errors.append("libtiff XMP differs")
+
+    layout, ours = read_strips(path, raw=True)
+    if layout[COMPRESSION] in (LZW, PACKBITS):
+        theirs = libtiff_reencode(path, layout, read_strips(path, raw=False)[1])
+        if messages:
+            errors.append("libtiff re-encoding: " + "; ".join(messages))
+        different = [i for i, (a, b) in enumerate(zip(ours, theirs)) if a != b]
+        if len(ours) != len(theirs) or different:
+            errors.append(f"libtiff writes different strips: {different[:5]} ({sum(map(len, ours))} vs {sum(map(len, theirs))} bytes)")
+        else:
+            totals[layout[COMPRESSION]] += sum(map(len, ours))
     return errors
 
 
@@ -122,7 +209,8 @@ def main():
         errors = verify(os.path.join(root, name), entry)
         print(f"{'FAIL' if errors else 'ok  '} {name}" + ("".join(f"\n     {e}" for e in errors)))
         failed += bool(errors)
-    print(f"{len(manifest) - failed}/{len(manifest)} files verified")
+    print(f"{len(manifest) - failed}/{len(manifest)} files verified; strips identical to libtiff: "
+          f"LZW {totals[LZW]} bytes, PackBits {totals[PACKBITS]} bytes")
     sys.exit(1 if failed else 0)
 
 

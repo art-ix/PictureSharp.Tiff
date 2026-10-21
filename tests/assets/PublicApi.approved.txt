@@ -19,20 +19,26 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Boolean Equals(System.Object)
   Boolean op_Equality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  Int32 DeflateLevel
   Int32 GetHashCode()
   Int32 RowsPerStrip
+  Int32 get_DeflateLevel()
   Int32 get_RowsPerStrip()
   PictureSharp.Formats.Tiff.TiffColorType ColorType
   PictureSharp.Formats.Tiff.TiffColorType get_ColorType()
   PictureSharp.Formats.Tiff.TiffCompression Compression
   PictureSharp.Formats.Tiff.TiffCompression get_Compression()
   PictureSharp.Formats.Tiff.TiffEncoderOptions <Clone>$()
+  PictureSharp.Formats.Tiff.TiffPredictor Predictor
+  PictureSharp.Formats.Tiff.TiffPredictor get_Predictor()
   PictureSharp.ImageFormat Format
   PictureSharp.ImageFormat get_Format()
   System.String ToString()
   Void .ctor()
   Void set_ColorType(PictureSharp.Formats.Tiff.TiffColorType)
   Void set_Compression(PictureSharp.Formats.Tiff.TiffCompression)
+  Void set_DeflateLevel(Int32)
+  Void set_Predictor(PictureSharp.Formats.Tiff.TiffPredictor)
   Void set_RowsPerStrip(Int32)
 PictureSharp.Formats.Tiff.TiffFormat
   Boolean IsSupported(System.ReadOnlySpan`1[System.Byte])
@@ -55,3 +61,4 @@ PictureSharp.Formats.Tiff.TiffImageExtensions
   Void SaveAsTiff(PictureSharp.Image, System.String, PictureSharp.Formats.Tiff.TiffEncoderOptions)
 PictureSharp.Formats.Tiff.TiffImageFormatExtensions
   PictureSharp.ImageFormat get_Tiff()
+PictureSharp.Formats.Tiff.TiffPredictor

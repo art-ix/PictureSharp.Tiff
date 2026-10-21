@@ -4,9 +4,19 @@ namespace PictureSharp.Formats.Tiff.Tests;
 
 public sealed class EncoderTests
 {
-    public static IEnumerable<(TiffColorType, int, int, int)> RoundTripCases()
+    private static readonly (TiffCompression, TiffPredictor)[] Compressions =
+    [
+        (TiffCompression.None, TiffPredictor.None),
+        (TiffCompression.PackBits, TiffPredictor.None),
+        (TiffCompression.Lzw, TiffPredictor.None),
+        (TiffCompression.Lzw, TiffPredictor.Horizontal),
+        (TiffCompression.Deflate, TiffPredictor.None),
+        (TiffCompression.Deflate, TiffPredictor.Horizontal),
+    ];
+
+    public static IEnumerable<(TiffColorType, int, int, int, TiffCompression, TiffPredictor)> RoundTripCases()
     {
-        TiffColorType[] types = [TiffColorType.Grayscale, TiffColorType.GrayscaleAlpha, TiffColorType.Rgb, TiffColorType.Rgba];
+        TiffColorType[] types = [TiffColorType.Grayscale, TiffColorType.GrayscaleAlpha, TiffColorType.Rgb, TiffColorType.Rgba, TiffColorType.Palette];
         (int, int)[] sizes = [(1, 1), (7, 3), (13, 1), (33, 17), (1, 40)];
         foreach (TiffColorType type in types)
         {
@@ -14,7 +24,10 @@ public sealed class EncoderTests
             {
                 foreach (int rows in new[] { 0, 1, 5 })
                 {
-                    yield return (type, width, height, rows);
+                    foreach ((TiffCompression compression, TiffPredictor predictor) in Compressions)
+                    {
+                        yield return (type, width, height, rows, compression, predictor);
+                    }
                 }
             }
         }
@@ -22,10 +35,11 @@ public sealed class EncoderTests
 
     [Test]
     [MethodDataSource(nameof(RoundTripCases))]
-    public async Task RoundTrip_ReadsBackTheColorType(TiffColorType colorType, int width, int height, int rowsPerStrip)
+    public async Task RoundTrip_ReadsBackTheColorType(TiffColorType colorType, int width, int height, int rowsPerStrip,
+        TiffCompression compression, TiffPredictor predictor)
     {
-        using Image source = EncoderSupport.Pattern(width, height, alpha: true);
-        byte[] file = source.ToTiff(EncoderSupport.Options(colorType, rowsPerStrip));
+        using Image source = EncoderSupport.Pattern(width, height, alpha: true, posterize: colorType == TiffColorType.Palette);
+        byte[] file = source.ToTiff(EncoderSupport.Options(colorType, rowsPerStrip, compression, predictor));
         using Image decoded = TestSupport.Load(file);
         await Assert.That((decoded.Width, decoded.Height)).IsEqualTo((width, height));
         await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, colorType)));
@@ -34,6 +48,80 @@ public sealed class EncoderTests
         int expectedRows = rowsPerStrip == 0 ? height : Math.Min(rowsPerStrip, height);
         await Assert.That(tags[278].Value).IsEqualTo((uint)expectedRows);
         await Assert.That(tags[273].Count).IsEqualTo((uint)((height + expectedRows - 1) / expectedRows));
+        await Assert.That(tags.ContainsKey(317)).IsEqualTo(predictor == TiffPredictor.Horizontal);
+    }
+
+    [Test]
+    [Arguments(TiffCompression.PackBits)]
+    [Arguments(TiffCompression.Lzw)]
+    [Arguments(TiffCompression.Deflate)]
+    public async Task WorstCaseInputs_RoundTrip(TiffCompression compression)
+    {
+        // Noise fills the LZW table many times over and forces resets; a single colour gives the longest runs.
+        using var noise = new Image(1000, 300);
+        var random = new Random(42);
+        random.NextBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(noise.GetPixelSpan()));
+        using var flat = new Image(3000, 300);
+        flat.GetPixelSpan().Fill(new Rgba32(77, 77, 77, 77));
+        foreach (Image source in new[] { noise, flat })
+        {
+            TiffEncoderOptions options = EncoderSupport.Options(TiffColorType.Rgba, compression: compression, predictor: TiffPredictor.None) with { RowsPerStrip = 300 };
+            byte[] file = source.ToTiff(options);
+            using Image decoded = TestSupport.Load(file);
+            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            long raw = source.Width * source.Height * 4L;
+            long stored = EncoderSupport.Tags(file)[279].Value;
+            await Assert.That(stored).IsLessThan(source == flat ? raw / 50 : raw + (raw / 2));
+        }
+    }
+
+    [Test]
+    public async Task Defaults_AreLzwWithTheHorizontalPredictor()
+    {
+        using Image source = EncoderSupport.Pattern(40, 30);
+        var tags = EncoderSupport.Tags(source.ToTiff(new TiffEncoderOptions { Configuration = TestSupport.Configuration }));
+        await Assert.That((tags[259].Value, tags[317].Value, tags[262].Value)).IsEqualTo((5u, 2u, 2u));
+        await Assert.That(new TiffEncoderOptions().DeflateLevel).IsEqualTo(6);
+    }
+
+    [Test]
+    [Arguments(769, true)]
+    [Arguments(768, false)]
+    public async Task Auto_ChoosesAPaletteForEnoughPixels(int pixels, bool palette)
+    {
+        using Image source = EncoderSupport.Pattern(pixels, 1, posterize: true);
+        byte[] file = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw));
+        var tags = EncoderSupport.Tags(file);
+        await Assert.That(tags[262].Value).IsEqualTo(palette ? 3u : 2u);
+        await Assert.That(tags.ContainsKey(320)).IsEqualTo(palette);
+        await Assert.That(tags.ContainsKey(317)).IsEqualTo(!palette);
+        using Image decoded = TestSupport.Load(file);
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+    }
+
+    [Test]
+    public async Task Auto_KeepsRgbForMoreThan256Colours()
+    {
+        using Image source = EncoderSupport.Pattern(300, 4);
+        source.GetPixelSpan()[0] = new Rgba32(1, 2, 3, 255);
+        var tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options()));
+        await Assert.That(tags[262].Value).IsEqualTo(2u);
+    }
+
+    [Test]
+    public async Task Palette_WithMoreThan256Colours_Throws()
+    {
+        using Image source = EncoderSupport.Pattern(64, 64);
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(TiffColorType.Palette))).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    [Arguments(TiffCompression.None)]
+    [Arguments(TiffCompression.PackBits)]
+    public async Task HorizontalPredictor_WithoutLzwOrDeflate_Throws(TiffCompression compression)
+    {
+        using Image source = EncoderSupport.Pattern(4, 4);
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(compression: compression, predictor: TiffPredictor.Horizontal))).Throws<ArgumentException>();
     }
 
     [Test]
@@ -114,7 +202,7 @@ public sealed class EncoderTests
     {
         using Image source = EncoderSupport.Pattern(200, 900, alpha: true);
         source.Metadata.IccProfile = [9, 8, 7];
-        TiffEncoderOptions options = EncoderSupport.Options(rowsPerStrip: 7);
+        TiffEncoderOptions options = EncoderSupport.Options(rowsPerStrip: 7, compression: TiffCompression.Lzw);
         byte[] seekable = source.ToTiff(options);
         using var sink = new MemoryStream();
         source.SaveAsTiff(new ForwardOnlyStream(sink), options);
@@ -148,6 +236,9 @@ public sealed class EncoderTests
         await Assert.That(() => new TiffEncoderOptions { RowsPerStrip = -1 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { ColorType = (TiffColorType)99 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { Compression = (TiffCompression)99 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { Predictor = (TiffPredictor)99 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { DeflateLevel = 10 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { DeflateLevel = -1 }).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]
