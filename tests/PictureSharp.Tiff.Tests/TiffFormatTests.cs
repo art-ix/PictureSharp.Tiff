@@ -33,13 +33,4 @@ public sealed class TiffFormatTests
         await Assert.That(Configuration.CanDecode(ImageFormat.Tiff)).IsTrue();
         await Assert.That(Configuration.CanEncode(ImageFormat.Tiff)).IsFalse();
     }
-
-    [Test]
-    public async Task Load_ThrowsNotSupported_UntilDecodingIsImplemented()
-    {
-        byte[] data = [(byte)'I', (byte)'I', 42, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-        var options = new DecoderOptions { Configuration = Configuration };
-        await Assert.That(() => Image.Load(data, options)).Throws<NotSupportedException>();
-        await Assert.That(() => Image.Identify(data, options)).Throws<NotSupportedException>();
-    }
 }

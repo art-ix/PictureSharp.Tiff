@@ -2,7 +2,7 @@
 
 PictureSharp.Tiff is a format plugin for [PictureSharp](https://github.com/art-ix/PictureSharp) that will read TIFF
 entirely in C#. It is a separate repository and package with its own version; it uses PictureSharp only through its
-public NuGet API. Version 0.1.0 is a skeleton and work on the format is paused.
+public NuGet API. Version 0.2.0 (baseline TIFF) is implemented locally and not released yet.
 
 Before starting, read [plan.md](plan.md) to identify the current version and its definition of done (DoD), then read
 the latest entries in `progres.md` if it exists. Append progress after significant steps and before ending a session.
@@ -38,6 +38,18 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
 | `tests/PictureSharp.Tiff.Tests/` | TUnit tests |
 | `tests/assets/` | Corpus, reference data, public API snapshot and generation scripts |
 | `reference/` | Uncommitted reference sources and tools (libtiff) |
+
+## Reference data
+
+- Pixels must match `tests/assets/reference.json` exactly. Regenerate the corpus and reference with the system
+  libtiff 4.5.1 (`libtiff.so.6`, the version Pillow 10.2.0 uses) and Pillow 10.2.0:
+
+  ```bash
+  python3 -I tests/assets/generate_corpus.py
+  ```
+
+- `reference/tiff-4.5.1/` holds the libtiff sources the codecs are ported from (downloaded with the user's approval
+  on 2026-10-21 from download.osgeo.org, SHA-256 `d7f38b67…a5e2b`).
 
 ## Build and verification
 

@@ -3,5 +3,67 @@ PictureSharp.Tiff third-party notices
 
 PictureSharp.Tiff is licensed under the MIT License (see LICENSE).
 
-No third-party code is included yet. Planned ports, each to be listed here with its license when added: parts of
-libtiff (LZW, predictor, CCITT fax).
+The IFD reader follows the TIFF 6.0 specification. Deflate uses System.IO.Compression from the .NET runtime.
+
+-------------------------------------------------------------------------------
+LibTIFF (http://www.simplesystems.org/libtiff/), version 4.5.1
+Used for: the PackBits decoder (tif_packbits.c PackBitsDecode), the LZW decoder including old-style LSB-first codes
+(tif_lzw.c LZWSetupDecode, LZWPreDecode, LZWDecode, LZWDecodeCompat), horizontal predictor 2 (tif_predict.c
+horAcc8, horAcc16, swabHorAcc16, PredictorDecodeTile) and fill order 2 (tif_swab.c TIFFReverseBits), in
+src/PictureSharp.Tiff/Codecs; the Deflate output limit follows tif_zip.c ZIPDecode. The code was translated to C#;
+it is not the original source.
+-------------------------------------------------------------------------------
+Copyright (c) 1988-1997 Sam Leffler
+Copyright (c) 1991-1997 Silicon Graphics, Inc.
+
+Permission to use, copy, modify, distribute, and sell this software and
+its documentation for any purpose is hereby granted without fee, provided
+that (i) the above copyright notices and this permission notice appear in
+all copies of the software and related documentation, and (ii) the names of
+Sam Leffler and Silicon Graphics may not be used in any advertising or
+publicity relating to the software without the specific, prior written
+permission of Sam Leffler and Silicon Graphics.
+
+THE SOFTWARE IS PROVIDED "AS-IS" AND WITHOUT WARRANTY OF ANY KIND,
+EXPRESS, IMPLIED OR OTHERWISE, INCLUDING WITHOUT LIMITATION, ANY
+WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+IN NO EVENT SHALL SAM LEFFLER OR SILICON GRAPHICS BE LIABLE FOR
+ANY SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY KIND,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER OR NOT ADVISED OF THE POSSIBILITY OF DAMAGE, AND ON ANY THEORY OF
+LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE
+OF THIS SOFTWARE.
+
+-------------------------------------------------------------------------------
+Pillow (https://python-pillow.org), version 10.2.0, the friendly fork of the
+Python Imaging Library
+Used for: the ExtraSamples rules (TiffImagePlugin.py OPEN_INFO) and the division of premultiplied colour by alpha
+(Unpack.c unpackRGBa), matched bit for bit for 8-bit samples. The code was translated to C#; it is not the original
+source.
+-------------------------------------------------------------------------------
+Copyright (c) 1997-2011 by Secret Labs AB
+Copyright (c) 1995-2011 by Fredrik Lundh and contributors
+Copyright (c) 2010 by Jeffrey A. Clark and contributors
+
+Pillow is licensed under the MIT-CMU (HPND) license:
+
+By obtaining, using, and/or copying this software and/or its associated
+documentation, you agree that you have read, understood, and will comply with
+the following terms and conditions:
+
+Permission to use, copy, modify, and distribute this software and its
+associated documentation for any purpose and without fee is hereby granted,
+provided that the above copyright notice appears in all copies, and that both
+that copyright notice and this permission notice appear in supporting
+documentation, and that the name of Secret Labs AB or the author not be used
+in advertising or publicity pertaining to distribution of the software without
+specific, written prior permission.
+
+SECRET LABS AB AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
+SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN
+NO EVENT SHALL SECRET LABS AB OR THE AUTHOR BE LIABLE FOR ANY SPECIAL, INDIRECT
+OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+THIS SOFTWARE.

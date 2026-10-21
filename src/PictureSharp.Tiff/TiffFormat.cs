@@ -1,9 +1,15 @@
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// The TIFF format plugin. This version only recognizes TIFF and BigTIFF files; decoding is not implemented yet, so
-/// identifying or loading one throws <see cref="NotSupportedException"/>.
+/// The TIFF format plugin (read only). It decodes the first full-resolution page of a classic TIFF file: strips or
+/// tiles, contiguous or planar samples, no compression, PackBits, LZW or Deflate with horizontal predictor 2, and
+/// greyscale (1-16 bits), palette (1-8 bits) or RGB (8 or 16 bits) colour with optional alpha. Other compressions,
+/// colour models and BigTIFF throw <see cref="NotSupportedException"/>.
 /// </summary>
+/// <remarks>
+/// Identifying an image reports the number of full-resolution pages
+/// as <see cref="ImageInfo.ContainerItemCount"/>. Samples deeper than 8 bits become <c>round(v / 257)</c>.
+/// </remarks>
 /// <example>
 /// <code>
 /// ImageConfiguration.Default = ImageConfiguration.Default.ToBuilder().AddFormat(new TiffFormat()).Build();
