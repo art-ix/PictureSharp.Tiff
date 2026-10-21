@@ -133,6 +133,10 @@ runs. libtiff 4.5.1 was called through ctypes with the same strips, predictor an
 ¹ libtiff as Ubuntu builds it compresses whole strips with libdeflate. The runtime's zlib takes as long as zlib itself
 on the same strips (2572 ms), so the difference is the library, not the plugin.
 
+The table writes RGB. The default `ColorType = Auto` first scans the pixels with vector instructions, on one thread:
+about 8 ms for this photo (opacity, grey and black-and-white checked at once; the palette check stops after 257
+colours).
+
 Reproduce with the probes in [benchmarks](https://github.com/art-ix/PictureSharp.Tiff/tree/main/benchmarks):
 
 ```bash

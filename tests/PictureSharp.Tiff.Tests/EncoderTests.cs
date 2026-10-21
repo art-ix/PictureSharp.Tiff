@@ -290,6 +290,58 @@ public sealed class EncoderTests
         await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
     }
 
+    /// <summary>Image lengths around vector widths and the scan's 4096-pixel blocks, with positions for one odd pixel.</summary>
+    public static IEnumerable<(int Length, int Position)> ScanPositions() =>
+        new[] { 1, 7, 8, 9, 15, 16, 17, 33, 4095, 4096, 4097, 4111, 8200, 16001 }
+            .SelectMany(n => new[] { 0, n / 2, n - 1, Math.Min(n - 1, 4096), Math.Min(n - 1, 4103) }.Distinct().Select(at => (n, at)));
+
+    [Test]
+    [MethodDataSource(nameof(ScanPositions))]
+    public async Task Auto_SeesOnePixelAnywhere(int length, int position)
+    {
+        using var image = new Image(length, 1);
+        for (int i = 0; i < length; i++)
+        {
+            byte v = (byte)(i % 3 == 0 ? 0 : 255);
+            image[i, 0] = new Rgba32(v, v, v, 255);
+        }
+
+        // (photometric, samples) for a 1 x length image: black and white, grey, grey with alpha, colour, colour with alpha.
+        await Assert.That(Chosen(image)).IsEqualTo((0u, 1u));
+        image[position, 0] = new Rgba32(128, 128, 128, 255);
+        await Assert.That(Chosen(image)).IsEqualTo((1u, 1u));
+        image[position, 0] = new Rgba32(255, 255, 255, 254);
+        await Assert.That(Chosen(image)).IsEqualTo((1u, 2u));
+        image[position, 0] = new Rgba32(255, 0, 255, 255);
+        await Assert.That(Chosen(image).Photometric is 2u or 3u).IsTrue();
+        await Assert.That(Tags(image, TiffCompression.Jpeg)[262].Value).IsEqualTo(6u);
+
+        if (length == 1)
+        {
+            return;
+        }
+
+        // Alpha and colour in different pixels, in both orders: the scan may stop only when it has seen both.
+        int other = length - 1 - position == position ? position + 1 : length - 1 - position;
+        image[other, 0] = new Rgba32(0, 0, 0, 7);
+        await Assert.That(Chosen(image)).IsEqualTo((2u, 4u));
+        await Assert.That(Tags(image, TiffCompression.WebP)[277].Value).IsEqualTo(4u);
+        image[other, 0] = new Rgba32(0, 0, 0, 255);
+        await Assert.That(Tags(image, TiffCompression.WebP)[277].Value).IsEqualTo(3u);
+        await Assert.That(Tags(image, TiffCompression.Jpeg)[262].Value).IsEqualTo(6u);
+        image[position, 0] = new Rgba32(9, 9, 9, 255);
+        await Assert.That(Tags(image, TiffCompression.Jpeg)[262].Value).IsEqualTo(1u);
+
+        static (uint Photometric, uint Samples) Chosen(Image image)
+        {
+            var tags = Tags(image, TiffCompression.Lzw);
+            return (tags[262].Value, tags.TryGetValue(277, out var samples) ? samples.Value : 1u);
+        }
+
+        static Dictionary<ushort, (ushort Type, uint Count, uint Value)> Tags(Image image, TiffCompression compression) =>
+            EncoderSupport.Tags(image.ToTiff(EncoderSupport.Options(compression: compression) with { WebPLossless = true }));
+    }
+
     [Test]
     public async Task DefaultStrips_HoldAbout64KiB()
     {

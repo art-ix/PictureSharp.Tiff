@@ -313,14 +313,10 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private static TiffColorType Choose(ReadOnlySpan<Rgba32> pixels, bool bilevel, out Dictionary<uint, byte>? palette)
     {
         palette = null;
-        bool alpha = false, gray = true;
-        foreach (Rgba32 p in pixels)
-        {
-            alpha |= p.A != 255;
-            gray &= p.R == p.G && p.G == p.B;
-            bilevel &= p.R is 0 or 255;
-        }
-
+        // The scan may stop once a pixel has alpha and one is not grey: RGBA whatever the rest holds.
+        (bool opaque, bool gray, bool allBilevel) = TiffPixelScan.Scan(pixels, opaque: true, gray: true);
+        bool alpha = !opaque;
+        bilevel &= allBilevel;
         if (gray && bilevel && !alpha)
         {
             return TiffColorType.BlackWhite;
@@ -341,32 +337,10 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     }
 
     /// <summary>Whether every pixel has R = G = B.</summary>
-    private static bool IsGray(ReadOnlySpan<Rgba32> pixels)
-    {
-        foreach (Rgba32 p in pixels)
-        {
-            if (p.R != p.G || p.G != p.B)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool IsGray(ReadOnlySpan<Rgba32> pixels) => TiffPixelScan.Scan(pixels, opaque: false, gray: true).Gray;
 
     /// <summary>Whether every pixel is opaque.</summary>
-    private static bool IsOpaque(ReadOnlySpan<Rgba32> pixels)
-    {
-        foreach (Rgba32 p in pixels)
-        {
-            if (p.A != 255)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    private static bool IsOpaque(ReadOnlySpan<Rgba32> pixels) => TiffPixelScan.Scan(pixels, opaque: true, gray: false).Opaque;
 
     private static TiffIfdWriter Ifd(Image image, Page layout, bool bigTiff)
     {

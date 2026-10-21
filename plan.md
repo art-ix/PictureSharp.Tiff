@@ -5,10 +5,9 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.5.0 released 2026-10-21 (writing: multi-page, tiles, BigTIFF, parallel compression, every compression,
-EditMetadata; includes the internal milestones 0.4.1–0.4.5). Next: 0.5.1 parallel reading, 0.5.2 parallel writing,
-0.6.0 smaller reading gaps (planned 2026-10-21, see "Next: 0.5.1–0.6.0"). 0.5.1 implemented (uncommitted): parallel decoding,
-8-bit fast paths, in-place uncompressed reads, row bands; release steps left.**
+**Status: 0.5.1 released 2026-10-21 (parallel reading, 8-bit fast paths, row bands). 0.5.2 (small scope, user
+decision 2026-10-21): vectorized Auto analysis implemented, uncommitted, not released; the ordered pipeline is
+deferred. Next: 0.6.0 reading gaps.**
 
 ## Versions
 
@@ -24,8 +23,8 @@ EditMetadata; includes the internal milestones 0.4.1–0.4.5). Next: 0.5.1 paral
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Released in 0.5.0 |
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Released in 0.5.0 |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
-| 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Implemented, not released |
-| 0.5.2 | Parallel writing beyond compression: ordered pipeline, parallel analysis, pages | Planned (gated by profiling) |
+| 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Released 2026-10-21 |
+| 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Implemented, not released |
 | 0.5.3 | Reading: more sample formats and bit depths | Planned, released in 0.6.0 |
 | 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Planned, released in 0.6.0 |
@@ -413,7 +412,8 @@ Fast paths and row bands done 2026-10-21 (uncommitted):
 - Release prepared (uncommitted): VERSION 0.5.1, `docs/releases/release-0.5.1.md`, `PackageReleaseNotes`. Native AOT
   consumer of the packed 0.5.1 package (local feed): the 28 write combinations, `EditMetadata`, and decoding at 1 and
   -1 threads (None, LZW, Deflate; many strips and one strip, pixels equal) pass without trim or AOT warnings.
-- Left: tag v0.5.1, push, NuGet and GitHub Release, after the user's approval.
+- Released 2026-10-21: tag v0.5.1 (3c4da36), GitHub Release with absolute blob/v0.5.1 links; the Release workflow
+  published the package to NuGet and attached the .nupkg.
 
 ### 0.5.2 — parallel writing
 
@@ -457,6 +457,50 @@ Gate profiled 2026-10-21 (temporary Stopwatch counters in `TiffEncoder`, removed
 - Also seen: None is slower on 16 threads than on one (44 against 33 ms; copying is memory-bound); encode it on one
   thread unless profiling of the pipeline says otherwise.
 - All three parts pass the gate; 0.5.2 goes ahead when the user decides.
+
+Follow-up experiments 2026-10-21 (temporary, reverted):
+
+- `BatchPerThread` 4 → 16 → 64 (64 holds almost the whole 24 MP image in one batch, so it bounds what removing the
+  barrier can give): LZW 122 → 123 → 97 ms, Deflate 328 → 309 → 292 ms; 160 small pages unchanged (152, 508 ms), as
+  batches stop at page boundaries. Larger batches are no substitute: the gain needs the whole page in flight, which
+  costs the compressed size in memory; only a pipeline gives it within the current bound.
+- `Choose` scan of 24 MP: 29.9 ms scalar, 7.5 ms with `System.Numerics.Vector<uint>` (opacity and R = G = B on one
+  thread). Vectorizing gets most of the gain without threads, bands or merging.
+
+Proposed scope (2026-10-21, awaiting the user's decision):
+
+1. **Vectorized analysis** (do): `Choose`, `IsGray`, `IsOpaque` with `Vector<uint>`; the palette scan stays as it is
+   (it stops after 257 colours, so photos leave it at once). About −22 ms of a default 24 MP LZW save (−17 %), −22 ms of
+   an uncompressed Auto save (62 → ~40 ms). No parallel bands: 7.5 ms is under the gate.
+2. **None on one thread** (do, after re-measuring): copying is memory-bound and slower in parallel (44 against 33 ms).
+3. **Ordered pipeline over the chunks of all pages** (optional): one mechanism for the barrier and for pages. Workers
+   take (page, chunk) indices in order and keep one `ChunkEncoder` per page; the caller writes in index order with at
+   most `degree × 4` results pending. Expected: LZW −20 %, Deflate −11 % on one large page; 160 small pages roughly
+   152 → 50 ms. Medium complexity (blocking window, cancellation, per-page encoders); covered by the byte-identical
+   snapshots and the degree tests. Helps the latency of one save; a server saving several images at once already
+   fills the idle threads with other work.
+4. **Parallel analysis in bands with an ordered palette merge** (drop): superseded by 1.
+
+Alternative to weigh against 3: single-thread decoding is still behind libtiff for LZW (363 against 268 ms); for
+throughput (many files at once) a faster LZW decoder is worth more than encode latency.
+
+Decision (user, 2026-10-21): the small scope, items 1 and 2; the pipeline (3) is deferred.
+
+Done 2026-10-21 (uncommitted):
+
+- **Vectorized analysis:** `Codecs/TiffPixelScan.Scan` checks opacity, R = G = B and R in {0, 255} with
+  `Vector<uint>` (little-endian; scalar otherwise and for the tail), in blocks of 4096 pixels, and stops once every
+  property the caller needs is false (`Choose`: alpha and not grey; `IsGray`, `IsOpaque`: their own). The choice is
+  unchanged, so every snapshot stays byte-identical.
+- **None on one thread: dropped.** Re-measured warm (benchmark probe, best of 9, twice): 32 ms on one thread, 24 ms on
+  16. The 44 ms measured for the gate was the first, cold encode of a fresh 73 MB output in the instrumented run.
+- **Tests:** `Auto_SeesOnePixelAnywhere` (46 cases): one grey, alpha or colour pixel at the start, middle, end and around
+  the 4096-pixel block edge of lengths 1–16001, plus alpha and colour in different pixels in both orders, for Auto
+  (LZW), JPEG (`IsGray`) and WebP (`IsOpaque`). Dropping the vector opacity result fails 42 of them. 2183 tests pass.
+- **Measured** (24 MP, best of 9): Auto minus RGB, LZW on 16 threads, alternating 20 runs: 3 ms (min) / 8 ms (median),
+  against 22–29 ms before. Uncompressed Auto on 16 threads 55 → 31 ms; a grey 24 MP image: None Auto 37 → 16 ms,
+  LZW Auto 66 → 45 ms. `docs/encoding.md` notes the cost of Auto.
+- Left: release (VERSION 0.5.2, release notes, `PackageReleaseNotes`) when the user decides.
 
 ### 0.5.3–0.6.0 — reading gaps
 
