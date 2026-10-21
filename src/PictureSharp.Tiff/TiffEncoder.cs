@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
+using PictureSharp.Formats.Jpeg;
 using PictureSharp.Formats.Tiff.Codecs;
 using PictureSharp.Formats.Tiff.Container;
 
@@ -19,6 +20,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private const ushort PhotometricMinIsBlack = 1;
     private const ushort PhotometricRgb = 2;
     private const ushort PhotometricPalette = 3;
+    private const ushort PhotometricYCbCr = 6;
+    private const int JpegMaxWidth = 65535;
     private const ushort PredictorHorizontal = 2;
     private const int PaletteMinPixels = 768;
     private const ushort UnassociatedAlpha = 2;
@@ -47,6 +50,16 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new ArgumentException("CCITT Group 4 compression writes only black-and-white images.", nameof(options));
         }
 
+        if (compression == TiffCompression.Jpeg && options.ColorType is not (TiffColorType.Auto or TiffColorType.Grayscale or TiffColorType.Rgb))
+        {
+            throw new ArgumentException("JPEG compression writes only greyscale or RGB images, without alpha.", nameof(options));
+        }
+
+        if (compression == TiffCompression.Jpeg && image.Width > JpegMaxWidth)
+        {
+            throw new NotSupportedException($"JPEG compression supports widths up to {JpegMaxWidth}.");
+        }
+
         if (options.Predictor == TiffPredictor.Horizontal && options.ColorType == TiffColorType.BlackWhite)
         {
             throw new ArgumentException("The horizontal predictor applies only to 8-bit samples, not black and white.", nameof(options));
@@ -56,6 +69,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         Dictionary<uint, byte>? palette = null;
         TiffColorType colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
             : compression == TiffCompression.CcittGroup4 ? TiffColorType.BlackWhite
+            : compression == TiffCompression.Jpeg ? (IsGray(pixels) ? TiffColorType.Grayscale : TiffColorType.Rgb)
             : Choose(pixels, bilevel: options.Predictor != TiffPredictor.Horizontal, out palette);
         if (colorType == TiffColorType.Palette && palette is null)
         {
@@ -76,13 +90,17 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 
         int width = image.Width, height = image.Height;
         long rowBytes = colorType == TiffColorType.BlackWhite ? (width + 7L) / 8 : (long)width * samplesPerPixel;
+        // JPEG strips other than the last hold whole MCU rows (libtiff requires it).
+        int block = compression != TiffCompression.Jpeg ? 1
+            : colorType == TiffColorType.Rgb && options.JpegSubsampling is JpegSubsampling.Ratio420 or JpegSubsampling.Ratio440 ? 16
+            : 8;
         int rowsPerStrip = options.RowsPerStrip > 0
-            ? Math.Min(options.RowsPerStrip, height)
-            : (int)Math.Clamp(StripTarget / rowBytes, 1, height);
+            ? (int)Math.Min((options.RowsPerStrip + (long)block - 1) / block * block, height)
+            : (int)Math.Min(Math.Max(StripTarget / rowBytes / block, 1) * block, height);
         int strips = (int)(((long)height + rowsPerStrip - 1) / rowsPerStrip);
         var offsets = new uint[strips];
         var counts = new uint[strips];
-        var layout = new Layout(colorType, samplesPerPixel, compression, horizontal, rowsPerStrip, palette,
+        var layout = new Layout(colorType, samplesPerPixel, compression, horizontal, rowsPerStrip, options.JpegSubsampling, palette,
             (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null,
             (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null);
 
@@ -114,6 +132,16 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         byte[]? packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)bound) : null;
         LzwEncoder? lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
         Fax4Encoder? fax4 = compression == TiffCompression.CcittGroup4 ? new Fax4Encoder() : null;
+        using MemoryStream? jpeg = compression == TiffCompression.Jpeg ? new MemoryStream() : null;
+        JpegEncoderOptions? jpegOptions = jpeg is null ? null : new JpegEncoderOptions
+        {
+            Quality = options.JpegQuality,
+            // A single component must have sampling factors 1x1, which libtiff checks (JPEGPreDecode).
+            Subsampling = colorType == TiffColorType.Grayscale ? JpegSubsampling.Ratio444 : options.JpegSubsampling,
+            ColorMode = colorType == TiffColorType.Grayscale ? JpegColorMode.Grayscale : JpegColorMode.Color,
+            Metadata = MetadataKinds.None,
+            Configuration = options.Configuration,
+        };
         using DeflateEncoder? deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
         long position = 8;
         try
@@ -123,7 +151,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                 cancellationToken.ThrowIfCancellationRequested();
                 int y0 = s * rowsPerStrip, rows = Math.Min(rowsPerStrip, height - y0);
                 Span<byte> samples = strip.AsSpan(0, (int)(rows * rowBytes));
-                for (int y = 0; y < rows; y++)
+                for (int y = 0; y < (jpeg is null ? rows : 0); y++)
                 {
                     ReadOnlySpan<Rgba32> row = pixels.Slice((y0 + y) * width, width);
                     Span<byte> target = samples.Slice((int)(y * rowBytes), (int)rowBytes);
@@ -152,6 +180,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                     TiffCompression.Lzw => packed.AsSpan(0, lzw!.Encode(samples, packed)),
                     TiffCompression.Deflate => deflate!.Encode(samples),
                     TiffCompression.CcittGroup4 => fax4!.Encode(samples, (int)rowBytes, width),
+                    TiffCompression.Jpeg => EncodeJpeg(pixels.Slice(y0 * width, rows * width), width, rows, jpeg!, jpegOptions!, cancellationToken),
                     _ => samples,
                 };
                 if (Align(position + data.Length) + ifdSize > uint.MaxValue)
@@ -243,6 +272,41 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         };
     }
 
+    /// <summary>Whether every pixel has R = G = B.</summary>
+    private static bool IsGray(ReadOnlySpan<Rgba32> pixels)
+    {
+        foreach (Rgba32 p in pixels)
+        {
+            if (p.R != p.G || p.G != p.B)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// One strip as a complete JPEG stream. Alpha is dropped rather than composited, as for the other compressions, and
+    /// the colour mode is fixed so that a grey strip of a colour image still has the three components the IFD declares.
+    /// </summary>
+    // port: libtiff/tif_jpeg.c JPEGSetupEncode and JPEGEncode write one interchange stream per strip when no JPEGTables
+    // are shared; libtiff itself shares the tables, which TTN2 leaves optional.
+    private static ReadOnlySpan<byte> EncodeJpeg(ReadOnlySpan<Rgba32> pixels, int width, int rows, MemoryStream output,
+        JpegEncoderOptions options, CancellationToken cancellationToken)
+    {
+        using var part = new Image(width, rows);
+        Span<Rgba32> target = part.GetPixelSpan();
+        for (int i = 0; i < target.Length; i++)
+        {
+            target[i] = pixels[i] with { A = 255 };
+        }
+
+        output.SetLength(0);
+        part.Save(output, options, cancellationToken);
+        return output.GetBuffer().AsSpan(0, (int)output.Length);
+    }
+
     private static TiffIfdWriter Ifd(Image image, Layout layout, uint[] offsets, uint[] counts)
     {
         var ifd = new TiffIfdWriter();
@@ -255,6 +319,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             TiffCompression.PackBits => (ushort)32773,
             TiffCompression.Lzw => (ushort)5,
             TiffCompression.Deflate => (ushort)8,
+            TiffCompression.Jpeg => (ushort)7,
             TiffCompression.CcittGroup4 => (ushort)4,
             _ => (ushort)1,
         });
@@ -262,6 +327,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         {
             TiffColorType.BlackWhite => PhotometricMinIsWhite,
             TiffColorType.Palette => PhotometricPalette,
+            TiffColorType.Rgb when layout.Compression == TiffCompression.Jpeg => PhotometricYCbCr,
             TiffColorType.Rgb or TiffColorType.Rgba => PhotometricRgb,
             _ => PhotometricMinIsBlack,
         });
@@ -279,6 +345,21 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         if (layout.Horizontal)
         {
             ifd.AddShort(TiffTag.Predictor, PredictorHorizontal);
+        }
+
+        if (layout.Compression == TiffCompression.Jpeg && layout.ColorType == TiffColorType.Rgb)
+        {
+            // port: libtiff/tif_jpeg.c JPEGSetupEncode: ReferenceBlackWhite is written because its default does not fit
+            // YCbCr.
+            (ushort h, ushort v) = layout.JpegSubsampling switch
+            {
+                JpegSubsampling.Ratio444 => ((ushort)1, (ushort)1),
+                JpegSubsampling.Ratio422 => ((ushort)2, (ushort)1),
+                JpegSubsampling.Ratio440 => ((ushort)1, (ushort)2),
+                _ => ((ushort)2, (ushort)2),
+            };
+            ifd.AddShort(TiffTag.YCbCrSubsampling, h, v);
+            ifd.AddRational(TiffTag.ReferenceBlackWhite, 0, 1, 255, 1, 128, 1, 255, 1, 128, 1, 255, 1);
         }
 
         if (layout.Palette is not null)
@@ -354,5 +435,5 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private static long Align(long offset) => (offset + 1) & ~1L;
 
     private sealed record Layout(TiffColorType ColorType, int SamplesPerPixel, TiffCompression Compression, bool Horizontal,
-        int RowsPerStrip, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp);
+        int RowsPerStrip, JpegSubsampling JpegSubsampling, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp);
 }

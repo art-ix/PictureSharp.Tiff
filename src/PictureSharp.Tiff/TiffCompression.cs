@@ -16,6 +16,16 @@ public enum TiffCompression
     Deflate,
 
     /// <summary>
+    /// Baseline JPEG (Compression 7), lossy, through the PictureSharp JPEG encoder: each strip is a complete JPEG stream
+    /// with its own tables, colour images as YCbCr with <see cref="TiffEncoderOptions.JpegSubsampling"/> and grey images
+    /// as one component. It writes <see cref="TiffColorType.Grayscale"/> or <see cref="TiffColorType.Rgb"/> (alpha is
+    /// dropped): <see cref="TiffColorType.Auto"/> chooses grey when every pixel has R = G = B, and any other colour type
+    /// makes saving fail with <see cref="ArgumentException"/>. Rows per strip are rounded up to a multiple of the JPEG
+    /// block height (8, or 16 with vertical chroma subsampling), and the width cannot exceed 65535.
+    /// </summary>
+    Jpeg,
+
+    /// <summary>
     /// CCITT Group 4 fax coding (T.6, Compression 4), the most compact lossless coding of black-and-white images. It
     /// writes only <see cref="TiffColorType.BlackWhite"/>: with <see cref="TiffColorType.Auto"/> the image is converted
     /// to black and white, and any other colour type makes saving fail with <see cref="ArgumentException"/>.

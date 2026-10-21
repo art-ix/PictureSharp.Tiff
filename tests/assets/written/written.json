@@ -1,5 +1,6 @@
 {
   "gray_7x3.tif": {
+    "decoded": null,
     "width": 7,
     "height": 3,
     "sha256": "651433afade569847ac9de95dcbfab8aeb2edaf8c5d6b6bb0b53cbf5ab20a1d9",
@@ -11,6 +12,7 @@
     "xmp": null
   },
   "gray_alpha_33x17.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
@@ -22,6 +24,7 @@
     "xmp": null
   },
   "rgb_33x17_rows5.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
@@ -33,6 +36,7 @@
     "xmp": null
   },
   "rgba_13x1.tif": {
+    "decoded": null,
     "width": 13,
     "height": 1,
     "sha256": "b23e66bfe0bfdd828715b77fccb94fc7de74fa9e4304bd7020fb039f0cd56b7c",
@@ -44,6 +48,7 @@
     "xmp": null
   },
   "rgb_1x1.tif": {
+    "decoded": null,
     "width": 1,
     "height": 1,
     "sha256": "e3820096cb82366b860b8a4e668453a7aaaf423af03bdf289fa308ea03a79332",
@@ -55,6 +60,7 @@
     "xmp": null
   },
   "gray_1x40_rows1.tif": {
+    "decoded": null,
     "width": 1,
     "height": 40,
     "sha256": "76f49a91a4edd459479557e91c3d58aa81940341a6ee4c8fca17f3e378575c69",
@@ -66,6 +72,7 @@
     "xmp": null
   },
   "gray_from_rgb_16x8.tif": {
+    "decoded": null,
     "width": 16,
     "height": 8,
     "sha256": "af4792fdba8111986f945ced803d1959dd58fb6a2d1a670ddd3102440371baf9",
@@ -77,6 +84,7 @@
     "xmp": null
   },
   "gray_alpha_from_rgba_16x8.tif": {
+    "decoded": null,
     "width": 16,
     "height": 8,
     "sha256": "d286e5747cfef4e97080c0e106c98d511b949265ecf39f2ad5e6af4618a20875",
@@ -88,6 +96,7 @@
     "xmp": null
   },
   "rgb_from_rgba_16x8.tif": {
+    "decoded": null,
     "width": 16,
     "height": 8,
     "sha256": "77c094836188bd74db3703785c035a7617cc830f59f0f7813fd360266075223b",
@@ -99,6 +108,7 @@
     "xmp": null
   },
   "rgba_opaque_8x8.tif": {
+    "decoded": null,
     "width": 8,
     "height": 8,
     "sha256": "75a47cad72bead550f940986e28719dbe1a0fbf36389943116609854790b12be",
@@ -110,6 +120,7 @@
     "xmp": null
   },
   "rgb_128x200_strips.tif": {
+    "decoded": null,
     "width": 128,
     "height": 200,
     "sha256": "367a15e5f63369d0ef2b61c067e43b07f99a38ea6a22c823fb8b0890e25ba5f4",
@@ -121,6 +132,7 @@
     "xmp": null
   },
   "rgb_metadata_9x9.tif": {
+    "decoded": null,
     "width": 9,
     "height": 9,
     "sha256": "b3a66092641fc3ef5ff03dc786740a374793267a2d29f1cb2597c64abe7c4f77",
@@ -132,6 +144,7 @@
     "xmp": "77e32a621a278d4949cfe949a561385a1d44e495c5697aaaf9b4bf8e39883d9a"
   },
   "palette_40x30_lzw.tif": {
+    "decoded": null,
     "width": 40,
     "height": 30,
     "sha256": "9ddadb89ecd88ff7b33ec51dffb40a01007c74e1916b730d2a6fc00d25178ca8",
@@ -143,6 +156,7 @@
     "xmp": null
   },
   "palette_7x3.tif": {
+    "decoded": null,
     "width": 7,
     "height": 3,
     "sha256": "0ae2dadb135e3700282445a5348f7f03b965bff249194bf5b78d140c0595e425",
@@ -154,6 +168,7 @@
     "xmp": null
   },
   "palette_40x30_deflate.tif": {
+    "decoded": null,
     "width": 40,
     "height": 30,
     "sha256": "9ddadb89ecd88ff7b33ec51dffb40a01007c74e1916b730d2a6fc00d25178ca8",
@@ -165,6 +180,7 @@
     "xmp": null
   },
   "gray_alpha_33x17_lzw_predictor.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
@@ -176,6 +192,7 @@
     "xmp": null
   },
   "rgb_33x17_lzw_predictor.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
@@ -187,6 +204,7 @@
     "xmp": null
   },
   "rgba_33x17_lzw.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "ba20f8eeb771a51ce77d3a5f271935b8d1239b79026cc3fec53056e7b466e8d5",
@@ -198,6 +216,7 @@
     "xmp": null
   },
   "rgb_128x200_lzw_predictor.tif": {
+    "decoded": null,
     "width": 128,
     "height": 200,
     "sha256": "367a15e5f63369d0ef2b61c067e43b07f99a38ea6a22c823fb8b0890e25ba5f4",
@@ -209,6 +228,7 @@
     "xmp": null
   },
   "gray_noise_128x128_lzw.tif": {
+    "decoded": null,
     "width": 128,
     "height": 128,
     "sha256": "c2891504e9f28a36fcfcffc275bd76d5266de4c28ea478d5233aae917e890792",
@@ -220,6 +240,7 @@
     "xmp": null
   },
   "rgb_noise_64x64_lzw_rows64.tif": {
+    "decoded": null,
     "width": 64,
     "height": 64,
     "sha256": "c60e2aedb9f789343394c07fa9e256d0d8f926ca1a866c77b7939a0135106450",
@@ -231,6 +252,7 @@
     "xmp": null
   },
   "gray_1x40_packbits_rows1.tif": {
+    "decoded": null,
     "width": 1,
     "height": 40,
     "sha256": "76f49a91a4edd459479557e91c3d58aa81940341a6ee4c8fca17f3e378575c69",
@@ -242,6 +264,7 @@
     "xmp": null
   },
   "rgb_128x200_packbits.tif": {
+    "decoded": null,
     "width": 128,
     "height": 200,
     "sha256": "367a15e5f63369d0ef2b61c067e43b07f99a38ea6a22c823fb8b0890e25ba5f4",
@@ -253,6 +276,7 @@
     "xmp": null
   },
   "rgb_posterized_100x60_packbits.tif": {
+    "decoded": null,
     "width": 100,
     "height": 60,
     "sha256": "0c7e51ab813065b7bcbb2d4ee307a93b402dc30accac3f1506f3352f54a1ff4a",
@@ -264,6 +288,7 @@
     "xmp": null
   },
   "gray_noise_96x40_packbits.tif": {
+    "decoded": null,
     "width": 96,
     "height": 40,
     "sha256": "fdd2dba2118c12f1bf6230f21d1412b0c933802c2c3701c6828374851bebe8e0",
@@ -275,6 +300,7 @@
     "xmp": null
   },
   "gray_flat_300x20_packbits.tif": {
+    "decoded": null,
     "width": 300,
     "height": 20,
     "sha256": "a48e6fe6fd179f184c7769ec6105f7109a1407a89f58ad4f4f12e844848c4ad4",
@@ -286,6 +312,7 @@
     "xmp": null
   },
   "rgba_33x17_deflate_predictor.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "ba20f8eeb771a51ce77d3a5f271935b8d1239b79026cc3fec53056e7b466e8d5",
@@ -297,6 +324,7 @@
     "xmp": null
   },
   "bw_61x40_g4.tif": {
+    "decoded": null,
     "width": 61,
     "height": 40,
     "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
@@ -308,6 +336,7 @@
     "xmp": null
   },
   "bw_noise_200x80_g4_rows16.tif": {
+    "decoded": null,
     "width": 200,
     "height": 80,
     "sha256": "31928dbc851c965ada91d67c48844b706d6589c5b682936142faf8e4ad164ec1",
@@ -319,6 +348,7 @@
     "xmp": null
   },
   "bw_wide_6000x12_g4.tif": {
+    "decoded": null,
     "width": 6000,
     "height": 12,
     "sha256": "5aba595b82b24379541f8ce487ccf626f370ad3f6757630a2b4fa599b0793246",
@@ -330,6 +360,7 @@
     "xmp": null
   },
   "bw_from_rgba_33x17_g4.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "b93ba3b9d1c4a2b1f02f85d68fe095d90975f2c715c93025ae01b3ca41670106",
@@ -341,6 +372,7 @@
     "xmp": null
   },
   "bw_61x40.tif": {
+    "decoded": null,
     "width": 61,
     "height": 40,
     "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
@@ -352,6 +384,7 @@
     "xmp": null
   },
   "bw_61x40_packbits_rows7.tif": {
+    "decoded": null,
     "width": 61,
     "height": 40,
     "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
@@ -363,6 +396,7 @@
     "xmp": null
   },
   "bw_61x40_lzw.tif": {
+    "decoded": null,
     "width": 61,
     "height": 40,
     "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
@@ -374,6 +408,7 @@
     "xmp": null
   },
   "bw_61x40_deflate.tif": {
+    "decoded": null,
     "width": 61,
     "height": 40,
     "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
@@ -385,6 +420,7 @@
     "xmp": null
   },
   "bw_from_gray_33x17.tif": {
+    "decoded": null,
     "width": 33,
     "height": 17,
     "sha256": "2f7c4cde84a540083df53e0dd6580d07d7128f3cb714948ac5d5001a4f8daa82",
@@ -395,7 +431,92 @@
     "icc": null,
     "xmp": null
   },
+  "jpeg_rgb_96x64.tif": {
+    "decoded": "jpeg_rgb_96x64.decoded.png",
+    "width": 96,
+    "height": 64,
+    "sha256": "e87a1d34a87a8a246a85433e43d588002fee3ba6d4b227e2555db7a80b875daa",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_rgb_70x40_444_q90_rows8.tif": {
+    "decoded": "jpeg_rgb_70x40_444_q90_rows8.decoded.png",
+    "width": 70,
+    "height": 40,
+    "sha256": "e11922507be544f1bc037aa81e08a1fc1b75052a925301abb82acfa2a5431709",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_rgb_33x17_422.tif": {
+    "decoded": "jpeg_rgb_33x17_422.decoded.png",
+    "width": 33,
+    "height": 17,
+    "sha256": "3de752821487b928e24d85f0bf46f619f5646844352aa037470bfd93e0213f1a",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_rgb_33x40_440_rows16.tif": {
+    "decoded": "jpeg_rgb_33x40_440_rows16.decoded.png",
+    "width": 33,
+    "height": 40,
+    "sha256": "64481c6cce70fa913529391e0015e20daa3cbd125b039b0516cd78cc992400fb",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_gray_61x30_rows8.tif": {
+    "decoded": "jpeg_gray_61x30_rows8.decoded.png",
+    "width": 61,
+    "height": 30,
+    "sha256": "6724a00f3b6406cee924d45e746b84bb208a6e8b669b7cb3568563bf68e9a1c2",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_gray_from_rgb_40x24.tif": {
+    "decoded": "jpeg_gray_from_rgb_40x24.decoded.png",
+    "width": 40,
+    "height": 24,
+    "sha256": "78714b6b1192ef4c7fe9fe97048e226474db63fcf8c3ec725ec3252a75500ae9",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_rgb_grey_strip_64x48_rows16.tif": {
+    "decoded": "jpeg_rgb_grey_strip_64x48_rows16.decoded.png",
+    "width": 64,
+    "height": 48,
+    "sha256": "153711e50333293943106e59c69de0e52594145cbd63a327bee5f79a583a9b68",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
   "gray_7x3_deflate_level0.tif": {
+    "decoded": null,
     "width": 7,
     "height": 3,
     "sha256": "651433afade569847ac9de95dcbfab8aeb2edaf8c5d6b6bb0b53cbf5ab20a1d9",

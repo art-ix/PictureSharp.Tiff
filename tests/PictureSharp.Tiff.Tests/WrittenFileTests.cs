@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using PictureSharp.Formats.Jpeg;
+using PictureSharp.Formats.Png;
 
 namespace PictureSharp.Formats.Tiff.Tests;
 
@@ -8,7 +10,8 @@ namespace PictureSharp.Formats.Tiff.Tests;
 /// Byte-exact snapshots of encoder output in <c>tests/assets/written</c>, which <c>verify_written.py</c> checks with
 /// libtiff 4.5.1 and Pillow 10.2.0. A mismatch writes the new files to <c>written.received</c> in the output directory:
 /// verify them with the script, then copy them over the snapshots. Deflate files are snapshotted for the script but not
-/// compared, since their bytes depend on the runtime's zlib.
+/// compared, since their bytes depend on the runtime's zlib. JPEG files come with our decode as a PNG
+/// (<c>name.decoded.png</c>), since libjpeg decodes them slightly differently.
 /// </summary>
 public sealed class WrittenFileTests
 {
@@ -68,6 +71,23 @@ public sealed class WrittenFileTests
         yield return ("bw_61x40_lzw", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(compression: TiffCompression.Lzw), TiffColorType.BlackWhite);
         yield return ("bw_61x40_deflate", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(compression: TiffCompression.Deflate), TiffColorType.BlackWhite);
         yield return ("bw_from_gray_33x17", () => EncoderSupport.Pattern(33, 17, gray: true), EncoderSupport.Options(TiffColorType.BlackWhite), TiffColorType.BlackWhite);
+        yield return ("jpeg_rgb_96x64", () => EncoderSupport.Pattern(96, 64), EncoderSupport.Options(compression: TiffCompression.Jpeg), TiffColorType.Rgb);
+        yield return ("jpeg_rgb_70x40_444_q90_rows8", () => EncoderSupport.Pattern(70, 40, alpha: true), EncoderSupport.Options(rowsPerStrip: 8, compression: TiffCompression.Jpeg) with { JpegQuality = 90, JpegSubsampling = JpegSubsampling.Ratio444 }, TiffColorType.Rgb);
+        yield return ("jpeg_rgb_33x17_422", () => EncoderSupport.Pattern(33, 17), EncoderSupport.Options(compression: TiffCompression.Jpeg) with { JpegSubsampling = JpegSubsampling.Ratio422 }, TiffColorType.Rgb);
+        yield return ("jpeg_rgb_33x40_440_rows16", () => EncoderSupport.Pattern(33, 40), EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.Jpeg) with { JpegSubsampling = JpegSubsampling.Ratio440 }, TiffColorType.Rgb);
+        yield return ("jpeg_gray_61x30_rows8", () => EncoderSupport.Pattern(61, 30, gray: true), EncoderSupport.Options(rowsPerStrip: 8, compression: TiffCompression.Jpeg), TiffColorType.Grayscale);
+        yield return ("jpeg_gray_from_rgb_40x24", () => EncoderSupport.Pattern(40, 24), EncoderSupport.Options(TiffColorType.Grayscale, compression: TiffCompression.Jpeg), TiffColorType.Grayscale);
+        yield return ("jpeg_rgb_grey_strip_64x48_rows16", () =>
+        {
+            Image image = EncoderSupport.Pattern(64, 48);
+            Span<Rgba32> pixels = image.GetPixelSpan();
+            for (int i = 0; i < 16 * 64; i++)
+            {
+                pixels[i] = new Rgba32(pixels[i].R, pixels[i].R, pixels[i].R, 255);
+            }
+
+            return image;
+        }, EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.Jpeg), TiffColorType.Rgb);
         yield return ("gray_7x3_deflate_level0", () => EncoderSupport.Pattern(7, 3, gray: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { DeflateLevel = 0 }, TiffColorType.Grayscale);
     }
 
@@ -82,8 +102,16 @@ public sealed class WrittenFileTests
             using Image source = create();
             byte[] file = source.ToTiff(options);
             using Image image = TestSupport.Load(file);
-            await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
-            manifest[name + ".tif"] = Entry(image);
+            if (options.Compression == TiffCompression.Jpeg)
+            {
+                await Assert.That(EncoderSupport.JpegStripsMatch(file, image, decoded == TiffColorType.Grayscale ? 1 : 3)).IsTrue();
+            }
+            else
+            {
+                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
+            }
+
+            manifest[name + ".tif"] = Entry(image, options.Compression == TiffCompression.Jpeg ? Decoded(image, Received, name) : null);
 
             string snapshot = Path.Combine(Snapshots, name + ".tif");
             File.WriteAllBytes(Path.Combine(Received, name + ".tif"), file);
@@ -116,25 +144,49 @@ public sealed class WrittenFileTests
         foreach (string name in TestSupport.Files())
         {
             using Image source = TestSupport.Load(TestSupport.ReadCorpus(name));
-            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate, TiffCompression.CcittGroup4 })
+            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate, TiffCompression.CcittGroup4, TiffCompression.Jpeg })
             {
                 byte[] file = source.ToTiff(EncoderSupport.Options(compression: compression));
                 using Image image = TestSupport.Load(file);
+                if (compression == TiffCompression.Jpeg)
+                {
+                    await Assert.That(EncoderSupport.JpegStripsMatch(file, image, EncoderSupport.Tags(file)[277].Value == 1 ? 1 : 3)).IsTrue();
+                    Record(name, compression, file, image, manifest);
+                    continue;
+                }
+
                 string expected = compression == TiffCompression.CcittGroup4
                     ? EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite))
                     : EncoderSupport.Sha256(source.GetPixelSpan());
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(expected);
-                string written = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}.tif";
-                File.WriteAllBytes(Path.Combine(CorpusOutput, written), file);
-                manifest[written] = Entry(image);
+                Record(name, compression, file, image, manifest);
             }
         }
 
         File.WriteAllText(Path.Combine(CorpusOutput, "written.json"), manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static JsonObject Entry(Image image) => new()
+    private static void Record(string name, TiffCompression compression, byte[] file, Image image, JsonObject manifest)
     {
+        string written = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}.tif";
+        File.WriteAllBytes(Path.Combine(CorpusOutput, written), file);
+        manifest[written] = Entry(image, compression == TiffCompression.Jpeg ? Decoded(image, CorpusOutput, Path.GetFileNameWithoutExtension(written)) : null);
+    }
+
+    /// <summary>
+    /// Our decode of a lossy file as a PNG next to it, which the script compares with Pillow and libtiff within the
+    /// tolerance of <see cref="JpegTests"/>; returns its name.
+    /// </summary>
+    private static string Decoded(Image image, string directory, string name)
+    {
+        string file = name + ".decoded.png";
+        File.WriteAllBytes(Path.Combine(directory, file), image.ToPng());
+        return file;
+    }
+
+    private static JsonObject Entry(Image image, string? decoded = null) => new()
+    {
+        ["decoded"] = decoded,
         ["width"] = image.Width,
         ["height"] = image.Height,
         ["sha256"] = EncoderSupport.Sha256(image.GetPixelSpan()),

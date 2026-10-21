@@ -9,6 +9,9 @@ Pillow must read the same pixels and metadata. libtiff must open the file withou
 same ICC profile, and convert it with TIFFReadRGBAImage to the same pixels. libtiff premultiplies RGB with unassociated
 alpha, (a * v + 127) / 255 as its UaToAa table computes, but passes grey with alpha through (putagreytile).
 
+JPEG files differ slightly between decoders (IDCT, chroma upsampling): for them written.json names our decode as a PNG,
+and Pillow and libtiff must stay within the tolerance of JpegTests (mean difference below 1.5, at most 24) instead.
+
 For LZW, PackBits and CCITT Group 4 files, libtiff also writes the decoded strips again with the same layout, compression and
 predictor (TIFFWriteEncodedStrip); its raw strips must equal ours byte for byte.
 """
@@ -159,15 +162,31 @@ def premultiply(rgba):
     return np.concatenate([color, a], axis=2).astype(np.uint8)
 
 
+def close(a, b):
+    """Whether two RGBA rasters are within the JPEG tolerance on RGB."""
+    d = np.abs(a[..., :3].astype(np.int32) - b[..., :3].astype(np.int32)).max(axis=2)
+    return d.mean() < 1.5 and d.max() <= 24, f"mean {d.mean():.3f}, max {d.max()}"
+
+
 def verify(path, entry):
     errors = []
+    ours = None
+    if entry.get("decoded"):
+        with Image.open(os.path.join(os.path.dirname(path), entry["decoded"])) as im:
+            ours = np.asarray(im.convert("RGBA"))
+        if sha(ours.tobytes()) != entry["sha256"]:
+            errors.append("decoded PNG differs from written.json")
     with Image.open(path) as im:
         im.load()
         pil = np.asarray(im.convert("RGBA"))
         premultiplied = im.mode == "RGBA"
         if im.size != (entry["width"], entry["height"]):
             errors.append(f"Pillow size {im.size}")
-        if sha(pil.tobytes()) != entry["sha256"]:
+        if ours is not None:
+            ok, detail = close(pil, ours)
+            if not ok:
+                errors.append(f"Pillow pixels not close: {detail}")
+        elif sha(pil.tobytes()) != entry["sha256"]:
             errors.append(f"Pillow pixels differ (mode {im.mode})")
         if sha(im.info.get("icc_profile")) != entry["icc"]:
             errors.append("Pillow ICC differs")
@@ -181,7 +200,11 @@ def verify(path, entry):
     raster, icc, xmp = libtiff_read(path)
     if messages:
         errors.append("libtiff: " + "; ".join(messages))
-    if not np.array_equal(raster, premultiply(pil) if premultiplied else pil):
+    if ours is not None:
+        ok, detail = close(raster, ours)
+        if not ok:
+            errors.append(f"libtiff pixels not close: {detail}")
+    elif not np.array_equal(raster, premultiply(pil) if premultiplied else pil):
         errors.append("libtiff pixels differ")
     if sha(icc) != entry["icc"]:
         errors.append("libtiff ICC differs")

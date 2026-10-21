@@ -1,4 +1,5 @@
 using System.Text;
+using PictureSharp.Formats.Jpeg;
 
 namespace PictureSharp.Formats.Tiff.Tests;
 
@@ -143,6 +144,85 @@ public sealed class EncoderTests
         await Assert.That(() => source.ToTiff(EncoderSupport.Options(colorType, compression: compression, predictor: predictor))).Throws<ArgumentException>();
     }
 
+    public static IEnumerable<(bool, int, int, int, JpegSubsampling)> JpegCases()
+    {
+        foreach (bool gray in new[] { false, true })
+        {
+            foreach ((int width, int height) in new[] { (1, 1), (13, 7), (33, 40), (70, 17) })
+            {
+                foreach (int rows in new[] { 0, 1, 9 })
+                {
+                    foreach (JpegSubsampling subsampling in Enum.GetValues<JpegSubsampling>())
+                    {
+                        if (!gray || subsampling == JpegSubsampling.Ratio420)
+                        {
+                            yield return (gray, width, height, rows, subsampling);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    [MethodDataSource(nameof(JpegCases))]
+    public async Task Jpeg_StripsAreCompleteStreams_DecodedAsTheCoreDecodesThem(bool gray, int width, int height, int rowsPerStrip, JpegSubsampling subsampling)
+    {
+        // The colour image has a grey top half: its strips must still have three components.
+        using Image source = EncoderSupport.Pattern(width, height, gray, alpha: true);
+        TiffColorType colorType = gray ? TiffColorType.Auto : TiffColorType.Rgb;
+        if (!gray)
+        {
+            Span<Rgba32> pixels = source.GetPixelSpan();
+            for (int i = 0; i < (height / 2) * width; i++)
+            {
+                pixels[i] = pixels[i] with { G = pixels[i].R, B = pixels[i].R };
+            }
+        }
+
+        byte[] file = source.ToTiff(EncoderSupport.Options(colorType, rowsPerStrip, TiffCompression.Jpeg) with { JpegSubsampling = subsampling });
+        using Image decoded = TestSupport.Load(file);
+        await Assert.That(EncoderSupport.JpegStripsMatch(file, decoded, gray ? 1 : 3)).IsTrue();
+        await Assert.That(decoded.GetPixelSpan().ToArray().All(p => p.A == 255)).IsTrue();
+
+        var tags = EncoderSupport.Tags(file);
+        int block = !gray && subsampling is JpegSubsampling.Ratio420 or JpegSubsampling.Ratio440 ? 16 : 8;
+        int expectedRows = rowsPerStrip == 0 ? height : Math.Min((rowsPerStrip + block - 1) / block * block, height);
+        await Assert.That((tags[259].Value, tags[262].Value, tags[277].Value, tags[278].Value)).IsEqualTo((7u, gray ? 1u : 6u, gray ? 1u : 3u, (uint)expectedRows));
+        await Assert.That(tags.ContainsKey(530)).IsEqualTo(!gray);
+        await Assert.That(tags.ContainsKey(532)).IsEqualTo(!gray);
+    }
+
+    [Test]
+    public async Task Jpeg_OneStrip_EqualsTheCoreJpegOfTheImage_AndQualityChangesTheSize()
+    {
+        using Image source = EncoderSupport.Pattern(96, 64);
+        byte[] low = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Jpeg) with { JpegQuality = 30 });
+        byte[] high = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Jpeg) with { JpegQuality = 95, JpegSubsampling = JpegSubsampling.Ratio444 });
+        await Assert.That(high.Length).IsGreaterThan(low.Length);
+        byte[] jpeg = source.ToJpeg(new JpegEncoderOptions { Quality = 95, Subsampling = JpegSubsampling.Ratio444, Metadata = MetadataKinds.None });
+        await Assert.That(EncoderSupport.Strips(high).Single().SequenceEqual(jpeg)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(TiffColorType.GrayscaleAlpha)]
+    [Arguments(TiffColorType.Rgba)]
+    [Arguments(TiffColorType.Palette)]
+    [Arguments(TiffColorType.BlackWhite)]
+    public async Task Jpeg_WithAnotherColourType_Throws(TiffColorType colorType)
+    {
+        using Image source = EncoderSupport.Pattern(8, 8, posterize: true);
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(colorType, compression: TiffCompression.Jpeg))).Throws<ArgumentException>();
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Jpeg, predictor: TiffPredictor.Horizontal))).Throws<ArgumentException>();
+    }
+
+    [Test]
+    public async Task Jpeg_WiderThan65535_IsNotSupported()
+    {
+        using var source = new Image(65536, 1);
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Jpeg))).Throws<NotSupportedException>();
+    }
+
     [Test]
     public async Task Defaults_AreLzwWithTheHorizontalPredictor()
     {
@@ -150,6 +230,7 @@ public sealed class EncoderTests
         var tags = EncoderSupport.Tags(source.ToTiff(new TiffEncoderOptions { Configuration = TestSupport.Configuration }));
         await Assert.That((tags[259].Value, tags[317].Value, tags[262].Value)).IsEqualTo((5u, 2u, 2u));
         await Assert.That(new TiffEncoderOptions().DeflateLevel).IsEqualTo(6);
+        await Assert.That((new TiffEncoderOptions().JpegQuality, new TiffEncoderOptions().JpegSubsampling)).IsEqualTo((75, JpegSubsampling.Ratio420));
     }
 
     [Test]
@@ -307,6 +388,9 @@ public sealed class EncoderTests
         await Assert.That(() => new TiffEncoderOptions { Predictor = (TiffPredictor)99 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { DeflateLevel = 10 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { DeflateLevel = -1 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { JpegQuality = 0 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { JpegQuality = 101 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { JpegSubsampling = (JpegSubsampling)9 }).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]

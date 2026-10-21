@@ -112,6 +112,60 @@ internal static class EncoderSupport
         return pixels;
     }
 
+    /// <summary>The raw strips of the first IFD of a little-endian TIFF.</summary>
+    public static List<byte[]> Strips(byte[] file)
+    {
+        var tags = Tags(file);
+        (_, uint count, uint offsets) = tags[273];
+        uint counts = tags[279].Value;
+        var strips = new List<byte[]>();
+        for (int i = 0; i < count; i++)
+        {
+            uint offset = count == 1 ? offsets : BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan((int)offsets + (4 * i)));
+            uint length = count == 1 ? counts : BinaryPrimitives.ReadUInt32LittleEndian(file.AsSpan((int)counts + (4 * i)));
+            strips.Add(file[(int)offset..(int)(offset + length)]);
+        }
+
+        return strips;
+    }
+
+    /// <summary>
+    /// Whether each JPEG strip of <paramref name="file"/> is a complete stream with <paramref name="components"/>
+    /// components that the core JPEG decoder decodes to the same pixels as <paramref name="image"/>.
+    /// </summary>
+    public static bool JpegStripsMatch(byte[] file, Image image, int components)
+    {
+        int rowsPerStrip = (int)Tags(file)[278].Value, y0 = 0;
+        foreach (byte[] strip in Strips(file))
+        {
+            using Image part = Image.Load(strip, TestSupport.Options);
+            if (JpegComponents(strip) != components || part.Width != image.Width || part.Height != Math.Min(rowsPerStrip, image.Height - y0)
+                || !part.GetPixelSpan().SequenceEqual(image.GetPixelSpan().Slice(y0 * image.Width, part.Width * part.Height)))
+            {
+                return false;
+            }
+
+            y0 += rowsPerStrip;
+        }
+
+        return y0 >= image.Height;
+    }
+
+    /// <summary>The component count of the first SOF segment of a JPEG stream.</summary>
+    public static int JpegComponents(byte[] jpeg)
+    {
+        for (int i = 2; i + 9 < jpeg.Length; i += 2 + ((jpeg[i + 2] << 8) | jpeg[i + 3]))
+        {
+            if (jpeg[i + 1] is 0xC0 or 0xC1 or 0xC2)
+            {
+                // A single component must be sampled 1x1 for libtiff.
+                return jpeg[i + 9] == 1 && jpeg[i + 11] != 0x11 ? -1 : jpeg[i + 9];
+            }
+        }
+
+        return 0;
+    }
+
     public static string Sha256(ReadOnlySpan<Rgba32> pixels) => Convert.ToHexStringLower(SHA256.HashData(MemoryMarshal.AsBytes(pixels)));
 
     public static string? Sha256(byte[]? block) => block is null ? null : Convert.ToHexStringLower(SHA256.HashData(block));

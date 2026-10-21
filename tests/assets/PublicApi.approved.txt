@@ -21,9 +21,13 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Int32 DeflateLevel
   Int32 GetHashCode()
+  Int32 JpegQuality
   Int32 RowsPerStrip
   Int32 get_DeflateLevel()
+  Int32 get_JpegQuality()
   Int32 get_RowsPerStrip()
+  PictureSharp.Formats.Jpeg.JpegSubsampling JpegSubsampling
+  PictureSharp.Formats.Jpeg.JpegSubsampling get_JpegSubsampling()
   PictureSharp.Formats.Tiff.TiffColorType ColorType
   PictureSharp.Formats.Tiff.TiffColorType get_ColorType()
   PictureSharp.Formats.Tiff.TiffCompression Compression
@@ -38,6 +42,8 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Void set_ColorType(PictureSharp.Formats.Tiff.TiffColorType)
   Void set_Compression(PictureSharp.Formats.Tiff.TiffCompression)
   Void set_DeflateLevel(Int32)
+  Void set_JpegQuality(Int32)
+  Void set_JpegSubsampling(PictureSharp.Formats.Jpeg.JpegSubsampling)
   Void set_Predictor(PictureSharp.Formats.Tiff.TiffPredictor)
   Void set_RowsPerStrip(Int32)
 PictureSharp.Formats.Tiff.TiffFormat

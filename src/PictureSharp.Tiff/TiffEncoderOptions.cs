@@ -42,6 +42,23 @@ public sealed record TiffEncoderOptions : EncoderOptions
         init => field = value is >= 0 and <= 9 ? value : throw new ArgumentOutOfRangeException(nameof(DeflateLevel), value, "The Deflate level must be between 0 and 9.");
     } = 6;
 
+    /// <summary>The quality of <see cref="TiffCompression.Jpeg"/>, 1 to 100, as for the JPEG encoder. Default: 75.</summary>
+    public int JpegQuality
+    {
+        get;
+        init => field = value is >= 1 and <= 100 ? value : throw new ArgumentOutOfRangeException(nameof(JpegQuality), value, "The JPEG quality must be between 1 and 100.");
+    } = 75;
+
+    /// <summary>
+    /// The chroma subsampling of colour <see cref="TiffCompression.Jpeg"/> strips, written as YCbCrSubSampling (tag
+    /// 530). Default: <see cref="Formats.Jpeg.JpegSubsampling.Ratio420"/>, as libtiff.
+    /// </summary>
+    public Formats.Jpeg.JpegSubsampling JpegSubsampling
+    {
+        get;
+        init => field = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(JpegSubsampling), value, "Unknown JPEG subsampling.");
+    } = Formats.Jpeg.JpegSubsampling.Ratio420;
+
     /// <summary>The samples to write. Default: <see cref="TiffColorType.Auto"/>.</summary>
     public TiffColorType ColorType
     {

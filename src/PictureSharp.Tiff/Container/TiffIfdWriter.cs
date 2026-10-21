@@ -33,12 +33,18 @@ internal sealed class TiffIfdWriter
         Add(tag, TiffEntry.Long, (uint)values.Length, value);
     }
 
-    public void AddRational(ushort tag, uint numerator, uint denominator)
+    public void AddRational(ushort tag, uint numerator, uint denominator) => AddRational(tag, [numerator, denominator]);
+
+    /// <summary>Rationals given as numerator, denominator pairs.</summary>
+    public void AddRational(ushort tag, params ReadOnlySpan<uint> pairs)
     {
-        byte[] value = new byte[8];
-        BinaryPrimitives.WriteUInt32LittleEndian(value, numerator);
-        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(4), denominator);
-        Add(tag, TiffEntry.Rational, 1, value);
+        byte[] value = new byte[pairs.Length * 4];
+        for (int i = 0; i < pairs.Length; i++)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(i * 4), pairs[i]);
+        }
+
+        Add(tag, TiffEntry.Rational, (uint)(pairs.Length / 2), value);
     }
 
     /// <summary>An ASCII value with its terminating NUL.</summary>

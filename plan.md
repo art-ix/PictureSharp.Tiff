@@ -6,7 +6,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1 (writer foundation) and
-0.4.2 (lossless compression, palette) done locally. Next: 0.4.3 JPEG and CCITT Group 4; writing is released as 0.5.0.**
+0.4.3 (JPEG, CCITT Group 4, bilevel) done locally. Next: 0.4.4 EXIF and metadata editing; writing is released as 0.5.0.**
 
 ## Versions
 
@@ -18,11 +18,12 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
-| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | In progress, local (JPEG waits for core 0.7.9) |
+| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Planned, local |
+| 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Planned, local |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
 
-0.4.1–0.4.4 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
+0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
 
 ## Implemented (0.2.0–0.3.0)
@@ -172,6 +173,22 @@ Done (G4 and bilevel):
   LZW, PackBits and G4 strip equals libtiff's. `rgb_1x1` now asks for RGB explicitly (`Auto` makes its black pixel
   bilevel). 1292 tests.
 
+Done (JPEG, on PictureSharp 0.7.9):
+- `TiffCompression.Jpeg` with `JpegQuality` (1–100, default 75) and `JpegSubsampling` (default 4:2:0, as libtiff). Each
+  strip is a strip-sized `Image` (alpha set opaque, so it is dropped as for the other compressions, not composited)
+  encoded by the core JPEG encoder with `ColorMode` fixed: `Color` for RGB (Photometric YCbCr, `YCbCrSubSampling`,
+  `ReferenceBlackWhite` [0 255 128 255 128 255] as libtiff's JPEGSetupEncode) and `Grayscale` with 4:4:4 for grey
+  (libtiff rejects a single component with sampling factors other than 1x1). The JFIF APP0 stays; no `JPEGTables`.
+- `Auto` writes grey when every pixel has R = G = B, else RGB. Deviation from the design: another colour type (alpha,
+  palette, bilevel) throws `ArgumentException` like the other option conflicts, not `NotSupportedException`.
+  `RowsPerStrip` is rounded up to whole MCU rows (8, or 16 with vertical chroma subsampling); width above 65535 throws
+  `NotSupportedException`.
+- Oracles: 7 JPEG snapshots (44 in all), each with our decode as `name.decoded.png`; `verify_written.py` compares
+  Pillow and libtiff with it within the 0.3.0 tolerance. Measured: Pillow decodes all 98 JPEG files (snapshots and the
+  new corpus JPEG pass) identically to ours, and libtiff stays within the tolerance; every strip is a complete stream
+  that the core JPEG decoder decodes to our pixels, with three components also for grey strips of colour images.
+  455/455 corpus files and 44/44 snapshots verified. 1358 tests.
+
 ### 0.4.4 — EXIF and metadata editing
 
 - `Metadata.Exif` (a TIFF-structured block) parsed with the existing reader: IFD0 descriptive tags (Make, Model,
@@ -184,6 +201,27 @@ Done (G4 and bilevel):
 - DoD: EXIF round trip (our reader, Pillow `getexif`, libtiff `TIFFReadEXIFDirectory`); orientation honoured by
   `ApplyExifOrientation`; `EditMetadata` on the whole decoder corpus leaves pixels identical and libtiff reads the
   result without warnings.
+
+### 0.4.5 — WebP compression
+
+User decision (2026-10-21): add WebP like JPEG, through the core codec instead of a port.
+
+- Compression 50001 as libtiff 4.5.1 `tif_webp.c` writes it (not in the Adobe registry; read by libtiff with libwebp,
+  GDAL and Pillow, not by Photoshop): each strip or tile is one complete WebP stream (RIFF), contiguous 8-bit RGB or
+  RGBA only (no grey, no palette), at most 16383 x 16383 per strip or tile.
+- Reading: decode each chunk with `ImageDecodeContext.DecodeEmbeddedPart` and the core WebP decoder (as JPEG strips);
+  a stream larger than its chunk, or a sample count other than 3 or 4, throws `ImageFormatException`. It replaces the
+  `NotSupportedException` for WebP.
+- Writing: `TiffCompression.WebP`, each strip encoded by the core WebP encoder (`WebPEncoderOptions`) on a strip-sized
+  image; options `WebPQuality` and `WebPLossless` (tag 65569 `WEBP_LOSSLESS`, as libtiff; the lossy quality in tag
+  65568 `WEBP_LEVEL` is not needed to read). `Auto` writes RGB or RGBA (alpha only when a pixel is not opaque); grey,
+  palette and bilevel colour types throw `ArgumentException`. Strips are limited to 16383 rows and the width to 16383.
+- To verify first: whether the core encoder keeps the alpha channel and RGB values of transparent pixels in lossless
+  mode (libtiff's `exact` setting), and that it writes no VP8X/metadata chunks libtiff rejects.
+- DoD: corpus written by libtiff with WebP (lossy and lossless, RGB and RGBA; the system libtiff 4.5.1 has the WebP
+  codec configured) decodes like the core WebP decode of each chunk and close to Pillow; our lossless
+  output round-trips exactly and is read by libtiff and Pillow without warnings; lossy output within a PSNR bound set
+  before implementation.
 
 ### 0.5.0 — multi-page, tiles, BigTIFF; release
 
@@ -206,7 +244,8 @@ Done (G4 and bilevel):
 - JPEG output (0.4.3): a public option in `JpegEncoderOptions` that keeps three components for grey pixels. The core
   encoder writes a strip whose pixels are all grey with one component, which libtiff rejects in a YCbCr file, and the
   switch for it (`color` in `JpegEncoder.EncodeImage`) is internal. Requested in the core `plan.md` as 0.7.9 (2026-10-21);
-  JPEG output waits for that release, CCITT G4 and bilevel output go first.
+  JPEG output waits for that release, CCITT G4 and bilevel output go first. Closed in core 0.7.9
+  (`JpegEncoderOptions.ColorMode`); used from 0.4.3.
 - To check during 0.5.0: a frame-writer SPI for plugins (`Image.CreateFrameWriter` supports only GIF, APNG and WebP),
   which would allow writing multi-page TIFF page by page without holding every frame. Report to the core `plan.md` if
   needed.

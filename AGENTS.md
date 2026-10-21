@@ -59,7 +59,7 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
   python3 -I tests/assets/verify_written.py tests/PictureSharp.Tiff.Tests/bin/Release/net10.0/written.received
   ```
 
-  The same script checks `written.corpus/`, where every test run writes the corpus re-encoded with PackBits, LZW, CCITT Group 4 and
+  The same script checks `written.corpus/`, where every test run writes the corpus re-encoded with PackBits, LZW, CCITT Group 4, JPEG and
   Deflate; for LZW and PackBits it also requires strips byte-identical to libtiff's.
 
 - `reference/tiff-4.5.1/` holds the libtiff sources the codecs are ported from (downloaded with the user's approval
