@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using PictureSharp.Formats.Tiff.Container;
 
 namespace PictureSharp.Formats.Tiff.Codecs;
@@ -87,6 +88,72 @@ internal sealed class TiffColorConverter
             {
                 byte g = Color(invert ? max - row[s] : row[s], a);
                 pixels[x] = new Rgba32(g, g, g, To8(a));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The same conversion for 8-bit samples read straight from a contiguous chunk row, where the scale is the identity:
+    /// opaque or straight-alpha grey, grey with alpha, RGB and RGBA have their own loops.
+    /// </summary>
+    public void Convert(ReadOnlySpan<byte> row, Span<Rgba32> pixels)
+    {
+        if (photometric == TiffLayout.Palette)
+        {
+            Rgba32[] colors = palette!;
+            for (int x = 0; x < pixels.Length; x++)
+            {
+                pixels[x] = colors[row[x * samples]];
+            }
+
+            return;
+        }
+
+        bool straight = alpha < 0 || !associated;
+        if (photometric == TiffLayout.Rgb && straight && samples == 4 && alpha == 3)
+        {
+            MemoryMarshal.Cast<byte, Rgba32>(row[..(pixels.Length * 4)]).CopyTo(pixels);
+            return;
+        }
+
+        if (photometric == TiffLayout.Rgb && straight)
+        {
+            for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+            {
+                pixels[x] = new Rgba32(row[s], row[s + 1], row[s + 2], alpha >= 0 ? row[s + alpha] : (byte)255);
+            }
+
+            return;
+        }
+
+        if (photometric == TiffLayout.BlackIsZero && straight)
+        {
+            for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+            {
+                byte g = row[s];
+                pixels[x] = new Rgba32(g, g, g, alpha >= 0 ? row[s + alpha] : (byte)255);
+            }
+
+            return;
+        }
+
+        bool invert = photometric == TiffLayout.WhiteIsZero;
+        for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+        {
+            int a = alpha >= 0 ? row[s + alpha] : 255;
+            if (photometric == TiffLayout.Rgb)
+            {
+                pixels[x] = new Rgba32(Color(row[s], a), Color(row[s + 1], a), Color(row[s + 2], a), (byte)a);
+            }
+            else if (photometric == TiffLayout.Separated)
+            {
+                int nk = 255 - row[s + 3];
+                pixels[x] = new Rgba32(Ink(row[s], nk), Ink(row[s + 1], nk), Ink(row[s + 2], nk), (byte)a);
+            }
+            else
+            {
+                byte g = Color(invert ? 255 - row[s] : row[s], a);
+                pixels[x] = new Rgba32(g, g, g, (byte)a);
             }
         }
     }

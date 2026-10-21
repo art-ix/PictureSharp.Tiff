@@ -6,8 +6,9 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.5.0 released 2026-10-21 (writing: multi-page, tiles, BigTIFF, parallel compression, every compression,
-EditMetadata; includes the internal milestones 0.4.1–0.4.5). Next: not decided; candidates are parallel strip decoding,
-old-style JPEG reading (Deferred) and Zstandard on .NET 11.**
+EditMetadata; includes the internal milestones 0.4.1–0.4.5). Next: 0.5.1 parallel reading, 0.5.2 parallel writing,
+0.6.0 smaller reading gaps (planned 2026-10-21, see "Next: 0.5.1–0.6.0"). 0.5.1 implemented (uncommitted): parallel decoding,
+8-bit fast paths, in-place uncompressed reads, row bands; release steps left.**
 
 ## Versions
 
@@ -23,6 +24,12 @@ old-style JPEG reading (Deferred) and Zstandard on .NET 11.**
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Released in 0.5.0 |
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Released in 0.5.0 |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
+| 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Implemented, not released |
+| 0.5.2 | Parallel writing beyond compression: ordered pipeline, parallel analysis, pages | Planned (gated by profiling) |
+| 0.5.3 | Reading: more sample formats and bit depths | Planned, released in 0.6.0 |
+| 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
+| 0.5.5 | Reading: JPEG variants (planar, CMYK) | Planned, released in 0.6.0 |
+| 0.6.0 | Release of the reading gaps | Planned |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
@@ -325,6 +332,135 @@ Part 2 (benchmark, Native AOT, documentation) done 2026-10-21:
 - Documentation: README (reading and writing, example, performance), `docs/releases/release-0.5.0.md`,
   `PackageReleaseNotes`, AGENTS.md; core README footnote ² changed to read and write (uncommitted in the core
   repository).
+
+## Next: 0.5.1–0.6.0
+
+Planned 2026-10-21. Order: reading speed first (the largest measured gap), writing only if profiling shows headroom,
+then the reading gaps. No public API changes are planned for 0.5.1 and 0.5.2; 0.6.0 widens what decodes.
+
+### 0.5.1 — parallel reading
+
+Baseline (0.5.0 benchmark, 24 MP RGB, i5-12500H): reading to RGBA takes None 98 ms, LZW 428 ms, Deflate 406 ms,
+against 45 / 268 / 148 ms for libtiff `TIFFReadRGBAImage`, because `TiffPixelDecoder` handles one chunk at a time.
+
+- **Degree:** `DecoderOptions.MaxDegreeOfParallelism` (core, -1 = processor count), as the core PNG and JPEG
+  decoders. No TIFF option.
+- **Unit of work:** one chunk index across all its planes (decompress, un-predict, convert). Chunks write disjoint
+  rectangles of the image, so the pixel span needs no locking. Contiguous ranges of chunks per thread (cache locality
+  and fewer handoffs); sequential below a threshold (few chunks or a small image) to avoid overhead.
+- **Per-thread state:** chunk buffer, `LzwDecoder`, `FaxDecoder` and the `IntegerChunkConverter` sample row are
+  per instance today; create one set per thread (like the encoder's `ChunkEncoder`). Read-only state (`TiffJpeg`
+  tables, colour maps, YCbCr tables) is shared; check each for hidden mutation.
+- **Memory:** each thread holds one chunk buffer (up to `ChunkBytes × Planes`) and, for JPEG and WebP, one decoded
+  part. `DecodeEmbeddedPart` documents "the image and one part"; with N threads it is the image and N parts. Cap the
+  degree so the buffers stay within one image's size (≤ 2× the image in total, the same bound as today's JPEG path).
+- **Nested parallelism:** `DecodeEmbeddedPart` passes the outer `MaxDegreeOfParallelism` to the core JPEG and WebP
+  decoders, so parallel parts each parallelize again. Measure first; if oversubscription costs time, request in the
+  core `plan.md` a way to set the part's degree (the encoder side already passes 1).
+- **Errors:** deterministic. Collect exceptions per chunk and rethrow the one from the lowest chunk index, unwrapped
+  from `AggregateException`, so a corrupt file reports the same `ImageFormatException` for every degree. Cancellation
+  is checked between chunks on every thread and surfaces as `OperationCanceledException`.
+- **One large strip** (writers that store the whole image in one strip): decompression cannot split, but predictor
+  undo and conversion can run in row bands in parallel after it.
+- **Single-thread fast paths:** contiguous 8-bit gray, gray+alpha, RGB and RGBA convert straight to `Rgba32` without the
+  `ushort` sample row; uncompressed data without `FillOrder` 2 converts directly from the file instead of being copied
+  to the chunk buffer first. Output must stay bit-identical.
+- DoD: whole corpus and fuzz/truncation/mutation tests at degree 1 and at the processor count with identical pixels
+  and identical exceptions; cancellation latency test with many strips; benchmark rerun and documented (README,
+  `docs/decoding.md`). Targets, not gates: None ≤ libtiff on one thread; LZW and Deflate below libtiff with all threads.
+
+Parallel decoding done 2026-10-21 (uncommitted):
+
+- `TiffPixelDecoder` decodes contiguous ranges of chunk indices (`degree × 4` ranges) with one `ChunkDecoder` per
+  thread (chunk buffer, `LzwDecoder`, `FaxDecoder`), writing through `Image.GetPixelMemory()`. The converters are
+  shared: `IntegerChunkConverter` rents its sample row per call instead of keeping one.
+- **Degree (decision):** the automatic degree (-1) stays on one thread below 2^18 pixels, as the core's loops; an
+  explicit degree is used as given, so the small corpus files exercise the parallel path in tests (no internals are
+  visible to them). Capped at the chunks per plane and at `w × h × 4 / per-thread buffers`.
+- **LZW:** the old-style decoder is chosen once, from the first two bytes of chunk 0 (after bit reversal), and passed
+  to every `LzwDecoder`, as libtiff's `LZWPreDecode` picks it from the first strip decoded.
+- **Fax:** `FaxDecoder` clears its run arrays at the start of each strip, so corrupt data cannot read runs left by the
+  strip the same thread decoded before (valid data never does; pixels unchanged).
+- **Errors:** a range stops at its first failure; ranges above the lowest failing chunk stop early, lower ones finish;
+  the exception of the lowest chunk is rethrown unwrapped, and a cancellation wins over format errors.
+- **Tests:** `ParallelDecodingTests`: corpus, JPEG and WebP files at degrees 1, 2 and max(4, processors) (about half
+  the files have several chunks per plane); the corpus re-encoded in 1-row strips (PackBits, LZW) and 16-pixel tiles
+  (None, Deflate); mutation and truncation outcomes (pixels or exception type and message) equal at 1 and N; every
+  strip of a 600 x 600 file corrupt reports strip 0; cancellation latency on 1536 strips. 2133 tests pass.
+- **Benchmark** (24 MP RGB, i5-12500H, 16 threads): None 83 / 18 ms, LZW 414 / 53 ms, Deflate 393 / 49 ms (1 / 16
+  threads), libtiff 45 / 268 / 148 ms. LZW and Deflate targets met; None on one thread (83 vs 45 ms) is left to the
+  fast paths. `docs/decoding.md` updated; the README has no speed section.
+- **Nested parallelism (measured):** JPEG strips of 16, 64 and 256 rows: 91 / 80 / 80 ms on 1 thread, 18 / 16 / 17 ms
+  on 16. Strips of 256 rows exceed the core's 2^18-pixel threshold and decode in parallel inside too (CPU time 223 ms
+  against 160 ms for 16 rows), without a wall-clock cost. No core request for now.
+
+Fast paths and row bands done 2026-10-21 (uncommitted):
+
+- **8-bit fast paths:** `TiffColorConverter.Convert(ReadOnlySpan<byte>, …)` converts contiguous 8-bit rows straight
+  from the chunk (no `ushort` row): RGBA with straight alpha is a block copy (`Rgba32` is sequential R, G, B, A), RGB(X)
+  and grey(+alpha) have their own loops, the rest (premultiplied, WhiteIsZero, CMYK, palette) one 8-bit loop with the
+  same rules. Planar 8-bit keeps the unpacking path.
+- **In place:** uncompressed contiguous chunks without FillOrder 2 are converted from the file bytes; the thread then
+  has no chunk buffer (and the memory cap counts none).
+- **Row bands:** an image with one chunk per plane (not JPEG, not packed YCbCr) is decompressed once, then un-predicted
+  and converted in `threads × 4` row bands. Only visible rows are un-predicted (rows are independent).
+- **Tests:** `OneLargeStrip_DecodesTheSameInRowBands` (777 x 555 in one strip, None, LZW, Deflate, grey and RGBA, at -1,
+  1 and N, equal to the source); the corpus single-strip files run in bands at an explicit degree. Breaking one band
+  fails 128 tests. 2137 tests pass.
+- **Benchmark** (24 MP RGB, 1 / 16 threads): None 25 / 10 ms, LZW 363 / 46 ms, Deflate 338 / 39 ms; libtiff 45 / 268 /
+  148 ms. All targets met. One strip: None 52 / 11 ms, LZW 364 / 307 ms, Deflate 342 / 286 ms (decompression stays
+  serial). `samples/IMG_20200214_0049.tif` (12 MP grey, 4-row strips): 116 ms in 0.5.0, now 17 / 5 ms.
+- Left: release steps (VERSION 0.5.1, release notes, `PackageReleaseNotes`), after the user's approval.
+
+### 0.5.2 — parallel writing
+
+0.5.0 already compresses chunks in parallel (LZW 691 → 106 ms, Deflate 2515 → 308 ms on 16 threads). What stays
+sequential, and the candidates:
+
+- **Batch barrier:** `EncodeChunks` runs `Parallel.For` over batches of `degree × 4` chunks and writes between them, so
+  threads wait for the slowest chunk of each batch and while the batch is written. Replace with an ordered pipeline:
+  workers take chunk indices in order, the caller writes finished chunks in index order, with a bounded window of
+  pending results (same memory bound as now).
+- **Automatic colour type:** `Choose`, `IsGray`, `IsOpaque` and `TiffSamplePacker.Palette` scan the whole frame on one
+  thread before compression. Scan row bands in parallel and merge in band order; the palette keeps first-occurrence
+  order, so the colour map and the bytes stay identical, with an early stop once a band exceeds 256 colours.
+- **Pages:** pages are encoded one after another, and a page with fewer chunks than threads leaves threads idle
+  (many small pages). Let the next page's chunks start while the previous page finishes, still written in page order.
+- **Gate:** before coding, profile the 24 MP benchmark and a many-small-pages case on 16 threads (idle time at the
+  barrier, time in the analysis scans). Implement only the parts worth more than ~10% of the encode; otherwise record
+  the measurement here and skip the milestone.
+- Deflate on one thread stays limited by the runtime's zlib (libtiff uses libdeflate); not part of this milestone.
+- DoD: every snapshot in `tests/assets/written/` byte-identical; output identical for every degree (existing tests);
+  benchmark rerun and documented.
+
+### 0.5.3–0.6.0 — reading gaps
+
+Ordered by how often the features appear in real files. Each milestone extends the corpus with libtiff-written files
+(`generate_corpus.py`) and documents the rounding in `docs/decoding.md`.
+
+- **0.5.3 — sample formats and bit depths:**
+  - Unsigned gray and RGB at any depth 1–16 (10-, 12- and 14-bit scientific and scanner files), scaled
+    `round(v · 255 / (2^b − 1))`; 32-bit unsigned integers, `round(v / 16843009)`.
+  - Floating point: 16-bit (half) and 64-bit, gray and RGB, with and without predictor 3, same clamp as 32-bit.
+  - Signed integers (`SampleFormat` 2), 8/16/32-bit gray and RGB (GeoTIFF elevation, scientific data). Mapping
+    (user decision, 2026-10-21): offset `v + 2^(b−1)`, then scaled as an unsigned sample of the same depth, so the
+    whole signed range maps linearly to 0–255 (the minimum to 0, the maximum to 255). Not clamping negatives to 0.
+    libtiff `TIFFReadRGBAImage` reinterprets the bits as unsigned, which is no useful reference; Pillow keeps 32-bit
+    integers. Oracle: samples from `TIFFReadEncodedStrip` plus the rule model.
+  - `BitsPerSample` 32 for integer samples needs a wider sample row than `ushort`; keep the 8/16-bit path unchanged.
+- **0.5.4 — CIELab (photometric 8):** 8- and 16-bit, port of `tif_getimage.c` `putcontig8bitCIELab8` /
+  `putcontig8bitCIELab16` and `tif_color.c` `TIFFCIELabToRGBInit`, `TIFFCIELabToXYZ`, `TIFFXYZToRGB` with libtiff's
+  `display_sRGB` and the file's white point. Oracle: libtiff `TIFFReadRGBAImage`, exact. ICCLab (9) and ITULab (10)
+  stay unsupported (libtiff's RGBA path does not convert them).
+- **0.5.5 — JPEG variants:** planar JPEG (each plane a one-component JPEG, decoded through `DecodeEmbeddedPart` and
+  merged) and CMYK JPEG (photometric 5, four components, as Photoshop writes). To verify first: what the core JPEG
+  decoder returns for a 4-component stream without an Adobe marker (it may need the raw components; a core request if
+  so). JPEG with alpha stays unsupported, as in libtiff.
+- **Not planned:** LogLuv, PixarLog (HDR; no 8-bit-only use), transparency masks (photometric 4) as the main page,
+  different `BitsPerSample` per sample, CMYK with other ink sets or premultiplied alpha, YCbCr deeper than 8 bits.
+  They keep throwing `NotSupportedException`.
+- **0.6.0 release:** all three milestones' DoDs; corpus and fuzz tests over the new files; `docs/decoding.md` support
+  table, release notes, `PackageReleaseNotes`; Native AOT consumer reads the new files.
 
 ## Core requests
 

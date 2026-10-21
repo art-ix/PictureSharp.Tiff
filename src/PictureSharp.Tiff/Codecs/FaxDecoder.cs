@@ -60,6 +60,10 @@ internal sealed class FaxDecoder
     {
         output.Clear();
 
+        // Corrupt data may read runs a previous strip left behind; cleared, every strip decodes the same on any thread.
+        curruns.AsSpan().Clear();
+        refruns.AsSpan().Clear();
+
         // port: libtiff/tif_fax3.c Fax3PreDecode: the reference line starts all white.
         if (twoDimensional)
         {

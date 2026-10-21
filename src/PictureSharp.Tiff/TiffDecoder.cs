@@ -52,7 +52,7 @@ internal sealed class TiffDecoder : IImageFormatDecoder
         var image = new Image(layout.Width, layout.Height);
         try
         {
-            TiffPixelDecoder.Decode(data, file.Image, layout, image.GetPixelSpan(), context);
+            TiffPixelDecoder.Decode(data, file.Image, layout, image.GetPixelMemory(), context);
             TiffMetadataReader.Read(bytes, file.Image, image.Metadata, context);
             return image;
         }

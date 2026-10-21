@@ -1,9 +1,10 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using PictureSharp.Formats.Tiff.Container;
 
 namespace PictureSharp.Formats.Tiff.Codecs;
 
-/// <summary>Turns one decoded strip or tile, every plane of it, into pixels.</summary>
+/// <summary>Turns one decoded strip or tile, every plane of it, into pixels. Instances are shared by the decoding threads.</summary>
 internal abstract class TiffChunkConverter
 {
     public static TiffChunkConverter Create(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout) =>
@@ -19,19 +20,45 @@ internal abstract class TiffChunkConverter
     public abstract void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba32> pixels, int stride);
 }
 
-/// <summary>Unsigned integer samples of 1 to 16 bits, unpacked per row and converted by <see cref="TiffColorConverter"/>.</summary>
+/// <summary>
+/// Unsigned integer samples of 1 to 16 bits, unpacked per row and converted by <see cref="TiffColorConverter"/>;
+/// contiguous 8-bit samples convert straight from the chunk.
+/// </summary>
 internal sealed class IntegerChunkConverter(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout) : TiffChunkConverter
 {
     private readonly TiffColorConverter colors = new(layout,
         layout.Photometric == TiffLayout.Palette ? TiffColorConverter.ReadPalette(data, ifd, layout.BitsPerSample) : null);
 
-    private readonly ushort[] samples = new ushort[layout.ChunkWidth * layout.SamplesPerPixel];
     private readonly int rowBytes = (int)layout.RowBytes;
     private readonly bool bigEndian = ifd.BigEndian;
 
     public override void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba32> pixels, int stride)
     {
         int spp = layout.SamplesPerPixel, bits = layout.BitsPerSample;
+        if (bits == 8 && !layout.Separate)
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                colors.Convert(chunk.Slice(r * rowBytes, width * spp), pixels.Slice(r * stride, width));
+            }
+
+            return;
+        }
+
+        ushort[] samples = ArrayPool<ushort>.Shared.Rent(width * spp);
+        try
+        {
+            ConvertRows(chunk, planeBytes, width, rows, pixels, stride, spp, bits, samples);
+        }
+        finally
+        {
+            ArrayPool<ushort>.Shared.Return(samples);
+        }
+    }
+
+    private void ConvertRows(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba32> pixels, int stride, int spp, int bits,
+        ushort[] samples)
+    {
         for (int r = 0; r < rows; r++)
         {
             if (layout.Separate)

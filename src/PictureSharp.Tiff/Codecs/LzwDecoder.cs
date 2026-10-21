@@ -3,9 +3,9 @@ using System.Buffers.Binary;
 namespace PictureSharp.Formats.Tiff.Codecs;
 
 /// <summary>
-/// TIFF LZW: MSB-first codes with "early change", and the old LSB-first codes of libtiff before 3.0. One instance
-/// decodes every strip of an image: as in libtiff, the first strip that looks old-style switches the decoder for the
-/// rest of the image. Table entries are indices, -1 standing for libtiff's null pointer.
+/// TIFF LZW: MSB-first codes with "early change", and the old LSB-first codes of libtiff before 3.0. As in libtiff, the
+/// first strip of an image picks the decoder for all of it (<see cref="IsCompat"/>); the caller makes that choice once
+/// and passes it to every instance. Table entries are indices, -1 standing for libtiff's null pointer.
 /// </summary>
 internal sealed class LzwDecoder
 {
@@ -19,12 +19,12 @@ internal sealed class LzwDecoder
     private const int CSize = (1 << BitsMax) - 1 + 1024;
 
     private readonly CodeEntry[] table = new CodeEntry[CSize];
-    private bool compatSelected;
-    private bool decodeSelected;
+    private readonly bool compat;
 
     // port: libtiff/tif_lzw.c LZWSetupDecode
-    public LzwDecoder()
+    public LzwDecoder(bool compat)
     {
+        this.compat = compat;
         for (int code = 0; code < CSize; code++)
         {
             table[code] = code < 256
@@ -33,16 +33,12 @@ internal sealed class LzwDecoder
         }
     }
 
-    // port: libtiff/tif_lzw.c LZWPreDecode: picks the decoder from the first two bytes of the strip.
+    // port: libtiff/tif_lzw.c LZWPreDecode: the first two bytes of the image's first strip select the old-style decoder.
+    public static bool IsCompat(ReadOnlySpan<byte> first) => first.Length >= 2 && first[0] == 0 && (first[1] & 1) != 0;
+
     public void Decode(ReadOnlySpan<byte> input, Span<byte> output)
     {
-        if (input.Length >= 2 && input[0] == 0 && (input[1] & 1) != 0 && !decodeSelected)
-        {
-            compatSelected = true;
-        }
-
-        decodeSelected = true;
-        if (compatSelected)
+        if (compat)
         {
             DecodeCompat(input, output);
         }

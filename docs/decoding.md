@@ -75,7 +75,12 @@ within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy incl
 - Cancellation is checked between strips and tiles.
 - `TargetSize`, `ApplyExifOrientation`, `ColorConversion` and `IgnoreMetadata` behave as for built-in formats. The
   orientation comes from the Orientation tag (274).
-- Decoding is single-threaded; `MaxDegreeOfParallelism` has no effect.
+- Strips and tiles decode in parallel, up to `MaxDegreeOfParallelism` threads (-1, the default, is one per processor).
+  The automatic degree decodes images under 262,144 pixels on one thread; an explicit degree is used as given. The
+  thread count is also capped at the number of strips or tiles and so that the threads' buffers stay within the size
+  of the image. An image in a single strip or tile is decompressed on one thread, then un-predicted and converted in
+  parallel row bands (except packed YCbCr). Pixels, and the exception a corrupt file throws (the one of its first failing strip or tile), are the
+  same for every degree.
 
 ## Errors
 
@@ -87,18 +92,29 @@ within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy incl
 
 ## Speed
 
-A 24 MP RGB photo (5712 x 4284) written by this encoder, read to RGBA on one thread (Intel Core i5-12500H, .NET 10,
-best of 5 runs), against libtiff 4.5.1 `TIFFReadRGBAImage` through ctypes:
+A 24 MP RGB photo (5712 x 4284) written by this encoder, read to RGBA (Intel Core i5-12500H with 16 threads, .NET 10,
+best of 5 runs), against libtiff 4.5.1 `TIFFReadRGBAImage` on one thread through ctypes:
 
-| Compression | PictureSharp.Tiff | libtiff 4.5.1 |
-| --- | ---: | ---: |
-| None | 98 ms | 45 ms |
-| LZW + predictor | 428 ms | 268 ms |
-| Deflate + predictor | 406 ms | 148 ms ¹ |
+| Compression | 1 thread | 16 threads | libtiff 4.5.1 |
+| --- | ---: | ---: | ---: |
+| None | 25 ms | 10 ms | 45 ms |
+| LZW + predictor | 363 ms | 46 ms | 268 ms |
+| Deflate + predictor | 338 ms | 39 ms | 148 ms ¹ |
+
+The same photo in a single strip decodes in 52 / 11 ms uncompressed (1 / 16 threads), but 364 / 307 ms with LZW and
+342 / 286 ms with Deflate: one compressed stream decompresses on one thread, and only the predictor and the conversion
+run in parallel.
 
 ¹ libtiff as Ubuntu builds it decompresses whole strips with libdeflate; PictureSharp uses the runtime's zlib.
 
-The probes are in [benchmarks](https://github.com/art-ix/PictureSharp.Tiff/tree/main/benchmarks).
+Reproduce with the probes in [benchmarks](https://github.com/art-ix/PictureSharp.Tiff/tree/main/benchmarks), on the
+files the encode probe writes:
+
+```bash
+dotnet run -c Release --project benchmarks/PictureSharp.Tiff.Speed -- encode photo.jpg --out /tmp/tiff
+dotnet run -c Release --project benchmarks/PictureSharp.Tiff.Speed -- decode /tmp/tiff/photo.*.tif --threads 1,all
+python3 -I benchmarks/libtiff_speed.py /tmp/tiff/photo.none.tif
+```
 
 ## Validation
 

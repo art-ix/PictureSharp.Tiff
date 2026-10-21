@@ -5,7 +5,7 @@ using PictureSharp.Formats.Tiff;
 
 // Wall-clock speed probe for TIFF encoding and decoding (best of N runs, after a warm-up run).
 //   encode <image>... [--runs 5] [--threads 1,all] [--out dir]   None, LZW and Deflate (predictor 2, level 6) strips
-//   decode <file.tif>... [--runs 5]                             the first page
+//   decode <file.tif>... [--runs 5] [--threads 1,all]           the first page
 // The image is loaded with any registered format and written as RGB; --out keeps the files for libtiff_speed.py.
 // Prints one TSV row per measurement: operation, file, compression, threads, best ms, allocated MB per run, bytes.
 ImageConfiguration.Default = ImageConfiguration.Default.ToBuilder().AddFormat(new TiffFormat()).Build();
@@ -50,8 +50,12 @@ switch (mode)
         foreach (string file in files)
         {
             byte[] bytes = File.ReadAllBytes(file);
-            (double ms, double mb) = Measure(() => Image.Load(bytes.AsSpan()).Dispose());
-            Row("decode", file, null, "1", ms, mb, bytes.Length);
+            foreach (string t in threads)
+            {
+                var options = new DecoderOptions { MaxDegreeOfParallelism = t == "all" ? -1 : int.Parse(t, CultureInfo.InvariantCulture) };
+                (double ms, double mb) = Measure(() => Image.Load(bytes, options).Dispose());
+                Row("decode", file, null, t, ms, mb, bytes.Length);
+            }
         }
 
         break;
