@@ -5,10 +5,9 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.5 (writer, compressions,
-EXIF and metadata editing, WebP) done locally; 0.5.0 part 1 (multi-page, tiles, BigTIFF, parallel compression) done
-locally; part 2 (benchmark, Native AOT, documentation) done locally, VERSION 0.5.0. Next: the release (tag v0.5.0,
-NuGet, GitHub Release), on the user's go-ahead.**
+**Status: 0.5.0 released 2026-10-21 (writing: multi-page, tiles, BigTIFF, parallel compression, every compression,
+EditMetadata; includes the internal milestones 0.4.1–0.4.5). Next: not decided; candidates are parallel strip decoding,
+old-style JPEG reading (Deferred) and Zstandard on .NET 11.**
 
 ## Versions
 
@@ -18,12 +17,12 @@ NuGet, GitHub Release), on the user's go-ahead.**
 | 0.3.0 | Extended decoder | Released 2026-10-21 |
 | 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Released in 0.4.0 |
 | 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
-| 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
-| 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
-| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
-| 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Done, local |
-| 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Done, local |
-| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Done, local; not released |
+| 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Released in 0.5.0 |
+| 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Released in 0.5.0 |
+| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Released in 0.5.0 |
+| 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Released in 0.5.0 |
+| 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Released in 0.5.0 |
+| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
