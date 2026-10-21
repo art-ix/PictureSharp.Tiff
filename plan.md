@@ -5,9 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.5.1 released 2026-10-21 (parallel reading, 8-bit fast paths, row bands). 0.5.2 (small scope, user
-decision 2026-10-21): vectorized Auto analysis implemented, uncommitted, not released; the ordered pipeline is
-deferred. Next: 0.6.0 reading gaps.**
+**Status: 0.5.1 released 2026-10-21 (parallel reading, 8-bit fast paths, row bands). 0.5.2 released 2026-10-21
+(vectorized Auto analysis; the ordered pipeline is deferred). Next: 0.6.0 reading gaps, starting with 0.5.3.**
 
 ## Versions
 
@@ -24,7 +23,7 @@ deferred. Next: 0.6.0 reading gaps.**
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Released in 0.5.0 |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
 | 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Released 2026-10-21 |
-| 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Implemented, not released |
+| 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Released 2026-10-21 |
 | 0.5.3 | Reading: more sample formats and bit depths | Planned, released in 0.6.0 |
 | 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Planned, released in 0.6.0 |
@@ -500,7 +499,7 @@ Done 2026-10-21 (uncommitted):
 - **Measured** (24 MP, best of 9): Auto minus RGB, LZW on 16 threads, alternating 20 runs: 3 ms (min) / 8 ms (median),
   against 22–29 ms before. Uncompressed Auto on 16 threads 55 → 31 ms; a grey 24 MP image: None Auto 37 → 16 ms,
   LZW Auto 66 → 45 ms. `docs/encoding.md` notes the cost of Auto.
-- Left: release (VERSION 0.5.2, release notes, `PackageReleaseNotes`) when the user decides.
+- Released 2026-10-21: VERSION 0.5.2, `docs/releases/release-0.5.2.md`, `PackageReleaseNotes`, tag v0.5.2, GitHub Release.
 
 ### 0.5.3–0.6.0 — reading gaps
 
