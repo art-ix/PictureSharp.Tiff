@@ -4,8 +4,8 @@ using PictureSharp.Formats.Tiff.Container;
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// Decodes the first full-resolution page of a classic TIFF file: strips or tiles, contiguous or planar samples,
-/// None, PackBits, LZW and Deflate compression with predictor 2, greyscale, palette and RGB with optional alpha.
+/// Decodes one full-resolution page of a TIFF file, the first unless <see cref="TiffDecoderOptions"/> selects another:
+/// strips or tiles, contiguous or planar samples, every supported compression and colour model.
 /// Pixel rounding is described on <see cref="TiffColorConverter"/>.
 /// </summary>
 internal sealed class TiffDecoder : IImageFormatDecoder
@@ -17,10 +17,13 @@ internal sealed class TiffDecoder : IImageFormatDecoder
 
     public static ImageFormatException Error(string message) => new(TiffFormat.Descriptor, message);
 
+    /// <summary>The page selected with <see cref="TiffDecoderOptions"/>, 0 without it.</summary>
+    public static int Page(DecoderOptions options) => options.GetFormatOptions<TiffDecoderOptions>()?.Page ?? 0;
+
     public ImageInfo Identify(ReadOnlyMemory<byte> data, DecoderOptions options)
     {
         ReadOnlySpan<byte> bytes = data.Span;
-        var file = TiffFile.Open(bytes, countPages: true);
+        var file = TiffFile.Open(bytes, Page(options), countPages: true);
         TiffLayout layout = TiffLayout.Read(bytes, file.Image);
         (float horizontal, float vertical) = TiffMetadataReader.Resolution(bytes, file.Image);
         return new ImageInfo
@@ -41,7 +44,7 @@ internal sealed class TiffDecoder : IImageFormatDecoder
     public Image Decode(ReadOnlyMemory<byte> data, ImageDecodeContext context)
     {
         ReadOnlySpan<byte> bytes = data.Span;
-        var file = TiffFile.Open(bytes, countPages: false);
+        var file = TiffFile.Open(bytes, Page(context.Options), countPages: false);
         TiffLayout layout = TiffLayout.Read(bytes, file.Image);
         layout.EnsureDecodable();
         context.ReservePixels(layout.Width, layout.Height);

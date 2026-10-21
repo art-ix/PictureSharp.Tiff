@@ -456,7 +456,10 @@ def cases():
 
 
 def expected_for(name, pages):
-    page = next(p for p in pages if not p.get("subfile"))
+    return page_expected(next(p for p in pages if not p.get("subfile")))
+
+
+def page_expected(page):
     extra = page.get("extra")
     mode = None
     if extra is None and page["samples"].shape[2] == (3 if page["photometric"] == "rgb" else 1) + 1:
@@ -525,10 +528,12 @@ def libtiff_float_samples(path):
         lib.TIFFClose(tif)
 
 
-def libtiff_rgba(path):
-    """libtiff's own TIFFRGBAImage conversion, top-left oriented, as straight 8-bit RGBA."""
+def libtiff_rgba(path, directory=0):
+    """libtiff's own TIFFRGBAImage conversion of an IFD (index in the chain), top-left oriented, as 8-bit RGBA."""
     tif = lib.TIFFOpen(path.encode(), b"r")
     try:
+        if directory and not lib.TIFFSetDirectory(ctypes.c_void_p(tif), ctypes.c_uint32(directory)):
+            raise RuntimeError(f"TIFFSetDirectory {directory} failed")
         w, h = get_u32(tif, IMAGEWIDTH), get_u32(tif, IMAGELENGTH)
         raster = (ctypes.c_uint32 * (w * h))()
         if not lib.TIFFReadRGBAImageOriented(tif, w, h, raster, 1, 1):
@@ -705,6 +710,23 @@ def cases_030():
     yield "bigtiff_pages", [dict(samples=rgb[::4, ::4].copy(), bits=8, photometric="rgb", subfile=1),
                             dict(samples=rgb, bits=8, photometric="rgb", compression="deflate")], dict(big_tiff=True), "model"
 
+    # 0.4.0 page selection: pages of different sizes, layouts and colour models, with reduced-resolution IFDs between.
+    small = photo(19, 11, 12)
+    cmap = [int(v) * 257 for v in rng.integers(0, 256, 768)]
+    yield "pages_mixed", [
+        dict(samples=s(gray), bits=8, photometric="minisblack"),
+        dict(samples=small[::2, ::2].copy(), bits=8, photometric="rgb", subfile=1),
+        dict(samples=rng.integers(0, 256, (11, 19, 1), dtype=np.uint8), bits=8, photometric="palette", colormap=cmap, compression="lzw"),
+        dict(samples=small, bits=8, photometric="rgb", compression="deflate", predictor=2, tile=(16, 16)),
+        dict(samples=np.dstack([rgb, alpha(w, h)]), bits=8, photometric="rgb", extra=[2], compression="packbits"),
+        dict(samples=s(bilevel), bits=1, photometric="miniswhite", compression="g4"),
+    ], {}, "model"
+    yield "pages_bigtiff_be", [
+        dict(samples=small, bits=8, photometric="rgb", compression="lzw", predictor=2),
+        dict(samples=s((gray.astype(np.uint16) * 257)), bits=16, photometric="minisblack", tile=(16, 16)),
+        dict(samples=rgb[::4, ::4].copy(), bits=8, photometric="rgb", subfile=1),
+    ], dict(big_tiff=True, big_endian=True), "model"
+
 
 def imagemagick_cases(src_png):
     """Files written by ImageMagick 6 `convert` from the same source (DoD: CMYK, float, BigTIFF)."""
@@ -729,8 +751,31 @@ def main():
                 bad = np.argwhere(got != want)[0]
                 raise SystemExit(f"{name}: Pillow differs from the model at {bad}: {got[tuple(bad[:2])]} vs {want[tuple(bad[:2])]}")
             oracle = "pillow"
-        reference[f"{name}.tif"] = dict(width=int(want.shape[1]), height=int(want.shape[0]), oracle=oracle,
-                                        sha256=hashlib.sha256(np.ascontiguousarray(want).tobytes()).hexdigest())
+        reference[f"{name}.tif"] = entry(want, oracle)
+
+    def entry(want, oracle):
+        return dict(width=int(want.shape[1]), height=int(want.shape[0]), oracle=oracle,
+                    sha256=hashlib.sha256(np.ascontiguousarray(want).tobytes()).hexdigest())
+
+    def record_pages(name, pages):
+        """Every full-resolution page of a multi-page file, checked against libtiff where its RGBA path is exact."""
+        if sum(not p.get("subfile") for p in pages) < 2:
+            return
+        path = os.path.join(CORPUS, name + ".tif")
+        listed = []
+        for directory, page in enumerate(pages):
+            if page.get("subfile"):
+                continue
+            want = page_expected(page) if page["bits"] > 1 else bilevel_expected(page["samples"][..., 0], page["photometric"])
+            # TIFFRGBAImage premultiplies unassociated alpha and takes the high byte of 16-bit samples.
+            oracle = "model"
+            if page["bits"] <= 8 and not page.get("extra"):
+                got = libtiff_rgba(path, directory)
+                if not np.array_equal(got, want):
+                    raise SystemExit(f"{name} IFD {directory}: libtiff differs from the model")
+                oracle = "libtiff"
+            listed.append(entry(want, oracle))
+        reference[f"{name}.tif"]["pages"] = listed
 
     for name, pages, opts in cases():
         write_tiff(os.path.join(CORPUS, name + ".tif"), pages, **opts)
@@ -738,6 +783,7 @@ def main():
         # Pillow keeps 16-bit samples apart and reduces them by taking the high byte, so only 8-bit and lower match.
         exact = page["bits"] <= 8 and all(v % 257 == 0 for v in page.get("colormap") or [])
         record(name, expected_for(name, pages), exact)
+        record_pages(name, pages)
 
     w, h = 100, 60
     noise = np.random.default_rng(5).integers(0, 256, (h, w), dtype=np.uint8)
@@ -780,6 +826,7 @@ def main():
             record(name, libtiff_rgba(path), page.get("compression", "none") != "none", oracle="libtiff")
         elif kind == "model":
             record(name, expected_for(name, pages), page["bits"] <= 8)
+            record_pages(name, pages)
         else:
             chunks = []
             for i, (stream, x, y, cw, ch) in enumerate(jpeg_chunks(path)):
@@ -819,6 +866,15 @@ def main():
                 record(name, libtiff_rgba(path), True, oracle="libtiff")
             else:
                 record(name, float_expected(libtiff_float_samples(path), "rgb"), False, oracle="libtiff")
+
+        # A multi-page file from ImageMagick: one page per input image.
+        src2 = os.path.join(work, "src2.png")
+        Image.fromarray(photo(23, 17, 13)).save(src2)
+        path = os.path.join(CORPUS, "im_pages_lzw.tif")
+        run("convert", src, src2, "-compress", "lzw", path)
+        pages = [libtiff_rgba(path, d) for d in range(2)]
+        record("im_pages_lzw", pages[0], True, oracle="libtiff")
+        reference["im_pages_lzw.tif"]["pages"] = [entry(p, "libtiff") for p in pages]
     finally:
         shutil.rmtree(work)
 

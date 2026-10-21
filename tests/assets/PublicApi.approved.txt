@@ -1,3 +1,16 @@
+PictureSharp.Formats.Tiff.TiffDecoderOptions
+  Boolean Equals(PictureSharp.Formats.FormatDecoderOptions)
+  Boolean Equals(PictureSharp.Formats.Tiff.TiffDecoderOptions)
+  Boolean Equals(System.Object)
+  Boolean op_Equality(PictureSharp.Formats.Tiff.TiffDecoderOptions, PictureSharp.Formats.Tiff.TiffDecoderOptions)
+  Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffDecoderOptions, PictureSharp.Formats.Tiff.TiffDecoderOptions)
+  Int32 GetHashCode()
+  Int32 Page
+  Int32 get_Page()
+  PictureSharp.Formats.Tiff.TiffDecoderOptions <Clone>$()
+  System.String ToString()
+  Void .ctor()
+  Void set_Page(Int32)
 PictureSharp.Formats.Tiff.TiffFormat
   Boolean IsSupported(System.ReadOnlySpan`1[System.Byte])
   Int32 HeaderSize

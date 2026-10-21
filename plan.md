@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.3.1 implemented, not released yet (0.3.0 released 2026-10-21, decoder only). Next: 0.4.0, then writing in
-0.4.x, released as 0.5.0.**
+**Status: 0.3.1 and 0.4.0 implemented, not released yet (0.3.0 released 2026-10-21, decoder only). Next: writing in
+0.4.1–0.4.4, released as 0.5.0.**
 
 ## Versions
 
@@ -15,7 +15,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | 0.1.0–0.2.0 | Skeleton; baseline decoder | Not released separately |
 | 0.3.0 | Extended decoder | Released 2026-10-21 |
 | 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Implemented, not released |
-| 0.4.0 | Page selection (`TiffDecoderOptions`) | Planned |
+| 0.4.0 | Page selection (`TiffDecoderOptions`) | Implemented, not released |
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Planned, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Planned, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Planned, local |
@@ -58,11 +58,18 @@ mutation tests also call `ReadMetadata`. 587 tests.
 ## 0.4.0 — page selection
 
 - `TiffDecoderOptions : FormatDecoderOptions` with `Page` (index among full-resolution pages, default 0), read through
-  `DecoderOptions.GetFormatOptions<T>()` in `Identify`, `Decode` and the metadata codec. A page beyond the last one
-  is a caller error (`ArgumentOutOfRangeException`), not corrupt data.
+  `DecoderOptions.GetFormatOptions<T>()` in `Identify`, `Decode` and the metadata codec. A negative page throws
+  `ArgumentOutOfRangeException` when the options are created; a page beyond the last one throws
+  `ImageFormatException`, like a missing `HeifDecoderOptions.ItemId` (a broken IFD chain cannot be told apart from a
+  short one).
 - `Identify` reports the selected page's size; `ContainerItemCount` stays the page count.
-- Open question for the user: also expose reduced-resolution pages and SubIFDs (tag 330)?
+- Reduced-resolution pages and SubIFDs (tag 330) are not selectable; a separate option can add them later if needed.
 - DoD: multi-page corpus files (libtiff, ImageMagick) decode each page equal to libtiff; public API snapshot.
+
+Done: `pages_mixed` (6 IFDs: gray, thumbnail, palette, tiled RGB, RGBA, G4), `pages_bigtiff_be` (BigTIFF big-endian,
+16-bit tiles), `im_pages_lzw` (ImageMagick) and `pages_thumbnail_first`; every page is checked against libtiff
+`TIFFReadRGBAImage` where its RGBA path is exact (8 bits, no alpha), otherwise against the rule model. 95-file
+corpus, 618 tests.
 
 ## Writing (0.4.1–0.5.0)
 

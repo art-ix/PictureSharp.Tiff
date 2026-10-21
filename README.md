@@ -2,7 +2,7 @@
 
 **TIFF for [PictureSharp](https://github.com/art-ix/PictureSharp), in 100% C#. No native dependencies.**
 
-The plugin reads the first full-resolution page of a classic TIFF or BigTIFF file: strips or tiles, contiguous or
+The plugin reads any full-resolution page of a classic TIFF or BigTIFF file: strips or tiles, contiguous or
 planar samples, no compression, PackBits, LZW, Deflate (predictors 2 and 3), JPEG and CCITT RLE/Group 3/Group 4;
 greyscale, palette, RGB, CMYK, YCbCr and 32-bit floating-point samples with optional alpha; ICC, XMP, EXIF/GPS,
 orientation and resolution. Old-style JPEG, JBIG, LZMA, Zstandard, WebP, CIE Lab and signed samples throw
@@ -31,6 +31,12 @@ Console.WriteLine($"{info.Width}x{info.Height}, {info.ContainerItemCount} page(s
 using var image = Image.Load("scan.tif");          // first full-resolution page; ICC, EXIF and XMP kept
 image.Mutate(x => x.AutoOrient().Resize(1600, 0));
 image.Save("scan.png");                            // format from the extension
+```
+
+Other pages are selected with `TiffDecoderOptions`; `Identify` and `ReadMetadata` accept the same options:
+
+```csharp
+using var second = Image.Load("scan.tif", new DecoderOptions { FormatOptions = [new TiffDecoderOptions { Page = 1 }] });
 ```
 
 A library can pass its own configuration through `DecoderOptions.Configuration` instead of changing the default.

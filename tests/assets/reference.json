@@ -269,6 +269,26 @@
   "oracle": "libtiff",
   "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
  },
+ "im_pages_lzw.tif": {
+  "width": 41,
+  "height": 27,
+  "oracle": "pillow",
+  "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99",
+  "pages": [
+   {
+    "width": 41,
+    "height": 27,
+    "oracle": "libtiff",
+    "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
+   },
+   {
+    "width": 23,
+    "height": 17,
+    "oracle": "libtiff",
+    "sha256": "693553674d20604b49ef07eb9834dfc7ededc9c1e9cbf7bdd87d3fac253a41fd"
+   }
+  ]
+ },
  "metadata.tif": {
   "width": 37,
   "height": 23,
@@ -281,11 +301,83 @@
   "oracle": "pillow",
   "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
  },
+ "pages_bigtiff_be.tif": {
+  "width": 19,
+  "height": 11,
+  "oracle": "model",
+  "sha256": "73232579b31fc3b656bb65ba60530ece88edc1483be69fe7927f7899e7c9711f",
+  "pages": [
+   {
+    "width": 19,
+    "height": 11,
+    "oracle": "libtiff",
+    "sha256": "73232579b31fc3b656bb65ba60530ece88edc1483be69fe7927f7899e7c9711f"
+   },
+   {
+    "width": 37,
+    "height": 23,
+    "oracle": "model",
+    "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+   }
+  ]
+ },
+ "pages_mixed.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89",
+  "pages": [
+   {
+    "width": 37,
+    "height": 23,
+    "oracle": "libtiff",
+    "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+   },
+   {
+    "width": 19,
+    "height": 11,
+    "oracle": "libtiff",
+    "sha256": "a177924869e2f2848bd5df3b690ca0897da93b5b0fba26dd1e2d480551b87fef"
+   },
+   {
+    "width": 19,
+    "height": 11,
+    "oracle": "libtiff",
+    "sha256": "73232579b31fc3b656bb65ba60530ece88edc1483be69fe7927f7899e7c9711f"
+   },
+   {
+    "width": 37,
+    "height": 23,
+    "oracle": "model",
+    "sha256": "f75ebea190472e2730fd37e59de202f3a979b7364a3871694c0942b0b696ef22"
+   },
+   {
+    "width": 80,
+    "height": 64,
+    "oracle": "libtiff",
+    "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+   }
+  ]
+ },
  "pages_thumbnail_first.tif": {
   "width": 37,
   "height": 23,
   "oracle": "model",
-  "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+  "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999",
+  "pages": [
+   {
+    "width": 37,
+    "height": 23,
+    "oracle": "libtiff",
+    "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+   },
+   {
+    "width": 37,
+    "height": 23,
+    "oracle": "libtiff",
+    "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+   }
+  ]
  },
  "palette1_none.tif": {
   "width": 37,

@@ -3,11 +3,12 @@ using PictureSharp.Formats.Tiff.Container;
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// The TIFF format plugin (read only). It decodes the first full-resolution page of a classic TIFF or BigTIFF file:
-/// strips or tiles, contiguous or planar samples, no compression, PackBits, LZW or Deflate with predictor 2 or 3,
-/// JPEG (through the configuration's JPEG codec) and CCITT RLE, Group 3 and Group 4; greyscale (1-16 bits), palette
-/// (1-8 bits), RGB and CMYK (8 or 16 bits), YCbCr (8 bits, subsampled) and 32-bit floating-point colour with optional
-/// alpha. Other compressions and colour models throw <see cref="NotSupportedException"/>.
+/// The TIFF format plugin (read only). It decodes one full-resolution page of a classic TIFF or BigTIFF file, the first
+/// unless <see cref="TiffDecoderOptions"/> selects another: strips or tiles, contiguous or planar samples, no
+/// compression, PackBits, LZW or Deflate with predictor 2 or 3, JPEG (through the configuration's JPEG codec) and CCITT
+/// RLE, Group 3 and Group 4; greyscale (1-16 bits), palette (1-8 bits), RGB and CMYK (8 or 16 bits), YCbCr (8 bits,
+/// subsampled) and 32-bit floating-point colour with optional alpha. Other compressions and colour models throw
+/// <see cref="NotSupportedException"/>.
 /// </summary>
 /// <remarks>
 /// Identifying an image reports the number of full-resolution pages

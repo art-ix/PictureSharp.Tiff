@@ -15,13 +15,16 @@ internal sealed class TiffFile
         Pages = pages;
     }
 
-    /// <summary>The first full-resolution IFD, or the first IFD when every one is reduced-resolution.</summary>
+    /// <summary>
+    /// The selected full-resolution IFD; for page 0, the first IFD when every one is reduced-resolution.
+    /// </summary>
     public TiffDirectory Image { get; }
 
     /// <summary>The number of full-resolution IFDs in the chain (at least 1); only counted when requested.</summary>
     public int Pages { get; }
 
-    public static TiffFile Open(ReadOnlySpan<byte> data, bool countPages)
+    /// <summary>Reads the chain up to <paramref name="page"/>, the index among full-resolution IFDs, or to its end.</summary>
+    public static TiffFile Open(ReadOnlySpan<byte> data, int page, bool countPages)
     {
         TiffHeader header = TiffHeader.Read(data);
         var visited = new HashSet<ulong>();
@@ -43,8 +46,7 @@ internal sealed class TiffFile
 
             if (!reduced)
             {
-                pages++;
-                if (!found)
+                if (!found && pages == page)
                 {
                     selected = offset;
                     found = true;
@@ -53,6 +55,8 @@ internal sealed class TiffFile
                         break;
                     }
                 }
+
+                pages++;
             }
 
             offset = next;
@@ -61,6 +65,11 @@ internal sealed class TiffFile
         if (visited.Count == 0)
         {
             throw TiffDecoder.Error("The TIFF file has no image directory.");
+        }
+
+        if (!found && page > 0)
+        {
+            throw TiffDecoder.Error($"The TIFF file has {Math.Max(1, pages)} page(s); page {page} does not exist.");
         }
 
         return new TiffFile(TiffDirectory.Parse(data, header, found ? selected : header.FirstIfd), Math.Max(1, pages));

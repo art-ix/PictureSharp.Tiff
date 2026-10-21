@@ -12,7 +12,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/art-ix/PictureSharp.Tiff</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.3.1: Image.ReadMetadata now works for TIFF (ICC, XMP, EXIF and resolution without decoding pixels); it threw NotSupportedException in 0.3.0. Requires PictureSharp 0.7.8. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.3.1/docs/releases/release-0.3.1.md</PackageReleaseNotes>
+    <PackageReleaseNotes>0.4.0: TiffDecoderOptions.Page selects a full-resolution page for Load, Identify and ReadMetadata. Includes 0.3.1: Image.ReadMetadata works for TIFF. Requires PictureSharp 0.7.8. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.4.0/docs/releases/release-0.4.0.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

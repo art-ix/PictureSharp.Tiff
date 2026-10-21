@@ -20,10 +20,12 @@ internal static class TestSupport
 
     public static Image Load(byte[] data, DecoderOptions? options = null) => Image.Load(data, options ?? Options);
 
-    public static ImageInfo Identify(byte[] data) => Image.Identify(data, Options);
+    public static ImageInfo Identify(byte[] data, DecoderOptions? options = null) => Image.Identify(data, options ?? Options);
+
+    public static DecoderOptions Page(int page) => Options with { FormatOptions = [new TiffDecoderOptions { Page = page }] };
 
     public static string Sha256(Image image) =>
         Convert.ToHexStringLower(SHA256.HashData(MemoryMarshal.AsBytes(image.GetPixelSpan())));
 }
 
-internal sealed record ReferenceEntry(int Width, int Height, string Oracle, string Sha256);
+internal sealed record ReferenceEntry(int Width, int Height, string Oracle, string Sha256, IReadOnlyList<ReferenceEntry>? Pages = null);
