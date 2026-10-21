@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.3.1 and 0.4.0 implemented, not released yet (0.3.0 released 2026-10-21, decoder only). Next: writing in
-0.4.1–0.4.4, released as 0.5.0.**
+**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). Next: writing in 0.4.1–0.4.4,
+released as 0.5.0.**
 
 ## Versions
 
@@ -14,8 +14,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | --- | --- | --- |
 | 0.1.0–0.2.0 | Skeleton; baseline decoder | Not released separately |
 | 0.3.0 | Extended decoder | Released 2026-10-21 |
-| 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Implemented, not released |
-| 0.4.0 | Page selection (`TiffDecoderOptions`) | Implemented, not released |
+| 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Released in 0.4.0 |
+| 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Planned, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Planned, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Planned, local |
@@ -50,7 +50,7 @@ public API and is released once, complete, in 0.5.0 (unless the user decides oth
 `TiffFormat` has no `MetadataCodec`, so `Image.ReadMetadata` throws `NotSupportedException` although the README
 lists it. Add `TiffMetadataCodec.Read` on top of `TiffMetadataReader` (same blocks and limits as decoding, no pixel
 data). DoD: ICC/XMP/EXIF/resolution equal to `Image.Load(...).Metadata` for the whole corpus; truncated and fuzzed files
-throw `ImageFormatException`. Patch release.
+throw `ImageFormatException`. Released in 0.4.0, not separately.
 
 Done: `TiffMetadataCodec`; the corpus test compares `ReadMetadata` with `Load` for all 92 files and the truncation and
 mutation tests also call `ReadMetadata`. 587 tests.
