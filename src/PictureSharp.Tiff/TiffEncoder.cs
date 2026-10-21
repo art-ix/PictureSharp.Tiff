@@ -15,6 +15,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 {
     private const int StripTarget = 64 * 1024;
     private const string Software = "PictureSharp.Tiff";
+    private const ushort PhotometricMinIsWhite = 0;
     private const ushort PhotometricMinIsBlack = 1;
     private const ushort PhotometricRgb = 2;
     private const ushort PhotometricPalette = 3;
@@ -36,14 +37,26 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         }
 
         TiffCompression compression = options.Compression;
-        if (options.Predictor == TiffPredictor.Horizontal && compression is TiffCompression.None or TiffCompression.PackBits)
+        if (options.Predictor == TiffPredictor.Horizontal && compression is not (TiffCompression.Lzw or TiffCompression.Deflate))
         {
             throw new ArgumentException("The horizontal predictor applies only to LZW and Deflate compression.", nameof(options));
         }
 
+        if (compression == TiffCompression.CcittGroup4 && options.ColorType is not (TiffColorType.Auto or TiffColorType.BlackWhite))
+        {
+            throw new ArgumentException("CCITT Group 4 compression writes only black-and-white images.", nameof(options));
+        }
+
+        if (options.Predictor == TiffPredictor.Horizontal && options.ColorType == TiffColorType.BlackWhite)
+        {
+            throw new ArgumentException("The horizontal predictor applies only to 8-bit samples, not black and white.", nameof(options));
+        }
+
         ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan();
         Dictionary<uint, byte>? palette = null;
-        TiffColorType colorType = options.ColorType == TiffColorType.Auto ? Choose(pixels, out palette) : options.ColorType;
+        TiffColorType colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
+            : compression == TiffCompression.CcittGroup4 ? TiffColorType.BlackWhite
+            : Choose(pixels, bilevel: options.Predictor != TiffPredictor.Horizontal, out palette);
         if (colorType == TiffColorType.Palette && palette is null)
         {
             palette = TiffSamplePacker.Palette(pixels)
@@ -52,17 +65,17 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 
         int samplesPerPixel = colorType switch
         {
-            TiffColorType.Grayscale or TiffColorType.Palette => 1,
+            TiffColorType.Grayscale or TiffColorType.Palette or TiffColorType.BlackWhite => 1,
             TiffColorType.GrayscaleAlpha => 2,
             TiffColorType.Rgb => 3,
             _ => 4,
         };
         bool horizontal = options.Predictor == TiffPredictor.Horizontal
             || (options.Predictor == TiffPredictor.Auto && compression is TiffCompression.Lzw or TiffCompression.Deflate
-                && colorType != TiffColorType.Palette);
+                && colorType is not (TiffColorType.Palette or TiffColorType.BlackWhite));
 
         int width = image.Width, height = image.Height;
-        long rowBytes = (long)width * samplesPerPixel;
+        long rowBytes = colorType == TiffColorType.BlackWhite ? (width + 7L) / 8 : (long)width * samplesPerPixel;
         int rowsPerStrip = options.RowsPerStrip > 0
             ? Math.Min(options.RowsPerStrip, height)
             : (int)Math.Clamp(StripTarget / rowBytes, 1, height);
@@ -100,6 +113,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         byte[] strip = ArrayPool<byte>.Shared.Rent((int)stripBytes);
         byte[]? packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)bound) : null;
         LzwEncoder? lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
+        Fax4Encoder? fax4 = compression == TiffCompression.CcittGroup4 ? new Fax4Encoder() : null;
         using DeflateEncoder? deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
         long position = 8;
         try
@@ -113,13 +127,17 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                 {
                     ReadOnlySpan<Rgba32> row = pixels.Slice((y0 + y) * width, width);
                     Span<byte> target = samples.Slice((int)(y * rowBytes), (int)rowBytes);
-                    if (palette is null)
+                    if (palette is not null)
                     {
-                        TiffSamplePacker.Pack(row, target, samplesPerPixel);
+                        TiffSamplePacker.PackIndices(row, target, palette);
+                    }
+                    else if (colorType == TiffColorType.BlackWhite)
+                    {
+                        TiffSamplePacker.PackBlackWhite(row, target);
                     }
                     else
                     {
-                        TiffSamplePacker.PackIndices(row, target, palette);
+                        TiffSamplePacker.Pack(row, target, samplesPerPixel);
                     }
                 }
 
@@ -133,6 +151,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                     TiffCompression.PackBits => packed.AsSpan(0, PackBitsEncoder.Encode(samples, (int)rowBytes, packed)),
                     TiffCompression.Lzw => packed.AsSpan(0, lzw!.Encode(samples, packed)),
                     TiffCompression.Deflate => deflate!.Encode(samples),
+                    TiffCompression.CcittGroup4 => fax4!.Encode(samples, (int)rowBytes, width),
                     _ => samples,
                 };
                 if (Align(position + data.Length) + ifdSize > uint.MaxValue)
@@ -189,10 +208,12 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     }
 
     /// <summary>
-    /// The smallest lossless type: grey when every pixel has R = G = B, else a palette when the image is opaque, has at
+    /// The smallest lossless type: black and white when <paramref name="bilevel"/> allows it and every pixel is opaque
+    /// black or white, grey when every pixel has
+    /// R = G = B, else a palette when the image is opaque, has at
     /// most 256 colours and enough pixels to outweigh the colour map, else RGB; alpha only when a pixel is not opaque.
     /// </summary>
-    private static TiffColorType Choose(ReadOnlySpan<Rgba32> pixels, out Dictionary<uint, byte>? palette)
+    private static TiffColorType Choose(ReadOnlySpan<Rgba32> pixels, bool bilevel, out Dictionary<uint, byte>? palette)
     {
         palette = null;
         bool alpha = false, gray = true;
@@ -200,6 +221,12 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         {
             alpha |= p.A != 255;
             gray &= p.R == p.G && p.G == p.B;
+            bilevel &= p.R is 0 or 255;
+        }
+
+        if (gray && bilevel && !alpha)
+        {
+            return TiffColorType.BlackWhite;
         }
 
         if (!gray && !alpha && pixels.Length > PaletteMinPixels)
@@ -222,16 +249,18 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         ifd.AddLong(TiffTag.ImageWidth, (uint)image.Width);
         ifd.AddLong(TiffTag.ImageLength, (uint)image.Height);
         Span<ushort> bits = [8, 8, 8, 8];
-        ifd.AddShort(TiffTag.BitsPerSample, bits[..layout.SamplesPerPixel]);
+        ifd.AddShort(TiffTag.BitsPerSample, layout.ColorType == TiffColorType.BlackWhite ? [1] : bits[..layout.SamplesPerPixel]);
         ifd.AddShort(TiffTag.Compression, layout.Compression switch
         {
             TiffCompression.PackBits => (ushort)32773,
             TiffCompression.Lzw => (ushort)5,
             TiffCompression.Deflate => (ushort)8,
+            TiffCompression.CcittGroup4 => (ushort)4,
             _ => (ushort)1,
         });
         ifd.AddShort(TiffTag.Photometric, layout.ColorType switch
         {
+            TiffColorType.BlackWhite => PhotometricMinIsWhite,
             TiffColorType.Palette => PhotometricPalette,
             TiffColorType.Rgb or TiffColorType.Rgba => PhotometricRgb,
             _ => PhotometricMinIsBlack,

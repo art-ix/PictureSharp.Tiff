@@ -22,7 +22,7 @@ public sealed class WrittenFileTests
         yield return ("gray_alpha_33x17", () => EncoderSupport.Pattern(33, 17, gray: true, alpha: true), EncoderSupport.Options(), TiffColorType.GrayscaleAlpha);
         yield return ("rgb_33x17_rows5", () => EncoderSupport.Pattern(33, 17), EncoderSupport.Options(rowsPerStrip: 5), TiffColorType.Rgb);
         yield return ("rgba_13x1", () => EncoderSupport.Pattern(13, 1, alpha: true), EncoderSupport.Options(), TiffColorType.Rgba);
-        yield return ("rgb_1x1", () => EncoderSupport.Pattern(1, 1), EncoderSupport.Options(), TiffColorType.Rgb);
+        yield return ("rgb_1x1", () => EncoderSupport.Pattern(1, 1), EncoderSupport.Options(TiffColorType.Rgb), TiffColorType.Rgb);
         yield return ("gray_1x40_rows1", () => EncoderSupport.Pattern(1, 40, gray: true), EncoderSupport.Options(rowsPerStrip: 1), TiffColorType.Grayscale);
         yield return ("gray_from_rgb_16x8", () => EncoderSupport.Pattern(16, 8), EncoderSupport.Options(TiffColorType.Grayscale), TiffColorType.Grayscale);
         yield return ("gray_alpha_from_rgba_16x8", () => EncoderSupport.Pattern(16, 8, alpha: true), EncoderSupport.Options(TiffColorType.GrayscaleAlpha), TiffColorType.GrayscaleAlpha);
@@ -59,6 +59,15 @@ public sealed class WrittenFileTests
             return image;
         }, EncoderSupport.Options(compression: TiffCompression.PackBits), TiffColorType.Grayscale);
         yield return ("rgba_33x17_deflate_predictor", () => EncoderSupport.Pattern(33, 17, alpha: true), EncoderSupport.Options(compression: TiffCompression.Deflate), TiffColorType.Rgba);
+        yield return ("bw_61x40_g4", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(compression: TiffCompression.CcittGroup4), TiffColorType.BlackWhite);
+        yield return ("bw_noise_200x80_g4_rows16", () => EncoderSupport.Bilevel(200, 80, noise: true), EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.CcittGroup4), TiffColorType.BlackWhite);
+        yield return ("bw_wide_6000x12_g4", () => EncoderSupport.Bilevel(6000, 12), EncoderSupport.Options(compression: TiffCompression.CcittGroup4), TiffColorType.BlackWhite);
+        yield return ("bw_from_rgba_33x17_g4", () => EncoderSupport.Pattern(33, 17, alpha: true), EncoderSupport.Options(compression: TiffCompression.CcittGroup4), TiffColorType.BlackWhite);
+        yield return ("bw_61x40", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(), TiffColorType.BlackWhite);
+        yield return ("bw_61x40_packbits_rows7", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(rowsPerStrip: 7, compression: TiffCompression.PackBits), TiffColorType.BlackWhite);
+        yield return ("bw_61x40_lzw", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(compression: TiffCompression.Lzw), TiffColorType.BlackWhite);
+        yield return ("bw_61x40_deflate", () => EncoderSupport.Bilevel(61, 40), EncoderSupport.Options(compression: TiffCompression.Deflate), TiffColorType.BlackWhite);
+        yield return ("bw_from_gray_33x17", () => EncoderSupport.Pattern(33, 17, gray: true), EncoderSupport.Options(TiffColorType.BlackWhite), TiffColorType.BlackWhite);
         yield return ("gray_7x3_deflate_level0", () => EncoderSupport.Pattern(7, 3, gray: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { DeflateLevel = 0 }, TiffColorType.Grayscale);
     }
 
@@ -94,9 +103,10 @@ public sealed class WrittenFileTests
     }
 
     /// <summary>
-    /// Every corpus image written with each compression must read back as the same pixels. The files go to
-    /// <c>written.corpus</c> in the output directory, where <c>verify_written.py</c> checks them against libtiff and
-    /// Pillow and compares the LZW and PackBits strips with libtiff's on the same samples.
+    /// Every corpus image written with each lossless compression must read back as the same pixels, and with CCITT
+    /// Group 4 as its black-and-white threshold. The files go to <c>written.corpus</c> in the output directory, where
+    /// <c>verify_written.py</c> checks them against libtiff and Pillow and compares the LZW, PackBits and Group 4 strips
+    /// with libtiff's on the same samples.
     /// </summary>
     [Test]
     public async Task Corpus_RoundTripsWithEveryCompression()
@@ -106,11 +116,14 @@ public sealed class WrittenFileTests
         foreach (string name in TestSupport.Files())
         {
             using Image source = TestSupport.Load(TestSupport.ReadCorpus(name));
-            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate })
+            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate, TiffCompression.CcittGroup4 })
             {
                 byte[] file = source.ToTiff(EncoderSupport.Options(compression: compression));
                 using Image image = TestSupport.Load(file);
-                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+                string expected = compression == TiffCompression.CcittGroup4
+                    ? EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite))
+                    : EncoderSupport.Sha256(source.GetPixelSpan());
+                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(expected);
                 string written = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}.tif";
                 File.WriteAllBytes(Path.Combine(CorpusOutput, written), file);
                 manifest[written] = Entry(image);

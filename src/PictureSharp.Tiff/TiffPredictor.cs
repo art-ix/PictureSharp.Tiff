@@ -4,8 +4,8 @@ namespace PictureSharp.Formats.Tiff;
 public enum TiffPredictor
 {
     /// <summary>
-    /// <see cref="Horizontal"/> for LZW and Deflate, except for palette images, whose indices do not vary smoothly;
-    /// <see cref="None"/> otherwise.
+    /// <see cref="Horizontal"/> for LZW and Deflate, except for palette images, whose indices do not vary smoothly, and
+    /// black-and-white images; <see cref="None"/> otherwise.
     /// </summary>
     Auto,
 
@@ -14,7 +14,8 @@ public enum TiffPredictor
 
     /// <summary>
     /// Each sample is stored as the difference from the same sample of the pixel to its left (Predictor 2), which makes
-    /// photographs and gradients compress better. Only valid with LZW and Deflate.
+    /// photographs and gradients compress better. Only valid with LZW and Deflate and 8-bit samples (not
+    /// <see cref="TiffColorType.BlackWhite"/>).
     /// </summary>
     Horizontal,
 }

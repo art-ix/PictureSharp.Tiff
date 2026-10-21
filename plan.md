@@ -18,7 +18,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
-| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Planned, local |
+| 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | In progress, local (JPEG waits for core 0.7.9) |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Planned, local |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
 
@@ -156,6 +156,22 @@ corpus, 618 tests.
 - DoD: G4 byte-identical to libtiff on the bilevel corpus; JPEG strips decoded by the core JPEG decoder equal our
   decoder's output, and libtiff `TIFFReadRGBAImage` within the same tolerance as the 0.3.0 JPEG tests.
 
+Decisions (2026-10-21): JPEG waits for core 0.7.9, which adds a public option that keeps three components (the core
+encoder writes an all-grey strip with one component, which libtiff rejects in a YCbCr file; see Core requests). G4 and
+bilevel output go first.
+
+Done (G4 and bilevel):
+- `TiffColorType.BlackWhite`: 1 bit, Photometric WhiteIsZero (1 = black, the natural polarity for fax coding), black
+  when the luminance is below 128, alpha dropped. `Auto` picks it when every pixel is opaque black or white, except with
+  an explicit horizontal predictor (which needs 8-bit samples, so the image stays grey).
+- `TiffCompression.CcittGroup4` (`Fax4Encoder`, port of `Fax4Encode`, `Fax3Encode2DRow`, `putspan`, `find0span`/
+  `find1span`; the run code tables are built from the decoder's code lists). It forces `BlackWhite` under `Auto`; another
+  colour type, or the horizontal predictor with G4 or with `BlackWhite`, throws `ArgumentException`.
+- Oracles: 9 new snapshots (37 in all), and `verify_written.py` also re-encodes G4 strips with libtiff: identical. The
+  corpus test adds a G4 pass (the threshold of every corpus image): 364/364 files pass Pillow and libtiff, and every
+  LZW, PackBits and G4 strip equals libtiff's. `rgb_1x1` now asks for RGB explicitly (`Auto` makes its black pixel
+  bilevel). 1292 tests.
+
 ### 0.4.4 — EXIF and metadata editing
 
 - `Metadata.Exif` (a TIFF-structured block) parsed with the existing reader: IFD0 descriptive tags (Make, Model,
@@ -187,6 +203,10 @@ corpus, 618 tests.
 
 - `DecodeEmbeddedPart` (JPEG strips within the image budget): closed in core 0.7.8.
 - Per-plugin decoder options (page selection): closed in core 0.7.6 (`DecoderOptions.FormatOptions`); used from 0.4.0.
+- JPEG output (0.4.3): a public option in `JpegEncoderOptions` that keeps three components for grey pixels. The core
+  encoder writes a strip whose pixels are all grey with one component, which libtiff rejects in a YCbCr file, and the
+  switch for it (`color` in `JpegEncoder.EncodeImage`) is internal. Requested in the core `plan.md` as 0.7.9 (2026-10-21);
+  JPEG output waits for that release, CCITT G4 and bilevel output go first.
 - To check during 0.5.0: a frame-writer SPI for plugins (`Image.CreateFrameWriter` supports only GIF, APNG and WebP),
   which would allow writing multi-page TIFF page by page without holding every frame. Report to the core `plan.md` if
   needed.

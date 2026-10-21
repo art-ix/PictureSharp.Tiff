@@ -15,7 +15,9 @@ PutNextCode); predictors 2 and 3 (tif_predict.c horAcc8, horAcc16, swabHorAcc16,
 PredictorEncodeTile);
 fill order 2 (tif_swab.c TIFFReverseBits); the CCITT RLE, Group 3 and Group 4 decoders (tif_fax3.c Fax3PreDecode,
 Fax3SetupState, Fax3Decode1D, Fax3Decode2D, Fax4Decode, Fax3DecodeRLE, _TIFFFax3fillruns and the tif_fax3.h
-macros) with their state tables (mkg3states.c FillTable and code lists); YCbCr to RGB (tif_color.c
+macros) with their state tables (mkg3states.c FillTable and code lists); the Group 4 encoder (tif_fax3.c
+Fax3PreEncode, Fax4Encode, Fax3Encode2DRow, putspan, find0span, find1span, _PutBits, _FlushBits, Fax4PostEncode and
+the t4.h run code tables); YCbCr to RGB (tif_color.c
 TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); packed
 YCbCr strip sizes (tif_strip.c TIFFVStripSize64); the BigTIFF header check (tif_open.c). The Deflate output limit
 follows tif_zip.c ZIPDecode and the JPEG table handling tif_jpeg.c JPEGPreDecode. The code was translated to C#; it

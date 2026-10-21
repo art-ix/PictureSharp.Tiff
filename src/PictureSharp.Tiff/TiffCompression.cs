@@ -14,4 +14,11 @@ public enum TiffCompression
 
     /// <summary>Deflate in a zlib stream (Adobe Deflate, Compression 8); smaller than LZW, read by most current software.</summary>
     Deflate,
+
+    /// <summary>
+    /// CCITT Group 4 fax coding (T.6, Compression 4), the most compact lossless coding of black-and-white images. It
+    /// writes only <see cref="TiffColorType.BlackWhite"/>: with <see cref="TiffColorType.Auto"/> the image is converted
+    /// to black and white, and any other colour type makes saving fail with <see cref="ArgumentException"/>.
+    /// </summary>
+    CcittGroup4,
 }

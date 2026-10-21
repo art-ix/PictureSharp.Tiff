@@ -121,6 +121,15 @@ internal static class FaxTables
         0x0000, 11,
     ];
 
+    /// <summary>
+    /// The white and black run codes for encoding as (code MSB first, length), indexed by run length for 0–63 and by
+    /// 63 + run / 64 for the make-up runs 64–2560.
+    /// </summary>
+    // port: libtiff/t4.h TIFFFaxWhiteCodes and TIFFFaxBlackCodes, built from the decoding lists above.
+    public static readonly (ushort Code, byte Length)[] WhiteCodes = RunCodes(TermWCodes, MakeUpWCodes);
+
+    public static readonly (ushort Code, byte Length)[] BlackCodes = RunCodes(TermBCodes, MakeUpBCodes);
+
     static FaxTables()
     {
         Fill(Main, 7, PassCodes, Pass);
@@ -153,6 +162,27 @@ internal static class FaxTables
                 table[code] = new Entry(state, (byte)width, param);
             }
         }
+    }
+
+    private static (ushort Code, byte Length)[] RunCodes(ushort[] terminating, ushort[] makeUp)
+    {
+        var table = new (ushort, byte)[64 + 40];
+        foreach (ushort[] codes in new[] { terminating, makeUp, MakeUpCodes })
+        {
+            for (int i = 0; i < codes.Length; i += 2)
+            {
+                int width = codes[i + 1] & 15, run = codes[i + 1] >> 4;
+                int reversed = 0;
+                for (int b = 0; b < width; b++)
+                {
+                    reversed |= ((codes[i] >> b) & 1) << (width - 1 - b);
+                }
+
+                table[run < 64 ? run : 63 + (run >> 6)] = ((ushort)reversed, (byte)width);
+            }
+        }
+
+        return table;
     }
 
     public readonly record struct Entry(byte State, byte Width, int Param);

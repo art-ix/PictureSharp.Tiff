@@ -4,7 +4,7 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 
 /// <summary>
 /// Turns <see cref="Rgba32"/> rows into contiguous 8-bit TIFF samples: grey (the luminance of colour pixels), grey and
-/// alpha, RGB, RGBA with the straight alpha as unassociated alpha, or palette indices.
+/// alpha, RGB, RGBA with the straight alpha as unassociated alpha, palette indices, or 1-bit black and white.
 /// </summary>
 internal static class TiffSamplePacker
 {
@@ -43,6 +43,19 @@ internal static class TiffSamplePacker
             default:
                 MemoryMarshal.AsBytes(row).CopyTo(samples);
                 break;
+        }
+    }
+
+    /// <summary>Writes one bit per pixel, MSB first, 1 for black (luminance below 128); the unused low bits of the last byte are 0.</summary>
+    public static void PackBlackWhite(ReadOnlySpan<Rgba32> row, Span<byte> bits)
+    {
+        bits.Clear();
+        for (int i = 0; i < row.Length; i++)
+        {
+            if (Gray(row[i]) < 128)
+            {
+                bits[i >> 3] |= (byte)(0x80 >> (i & 7));
+            }
         }
     }
 

@@ -12,12 +12,13 @@ public sealed class EncoderTests
         (TiffCompression.Lzw, TiffPredictor.Horizontal),
         (TiffCompression.Deflate, TiffPredictor.None),
         (TiffCompression.Deflate, TiffPredictor.Horizontal),
+        (TiffCompression.CcittGroup4, TiffPredictor.None),
     ];
 
     public static IEnumerable<(TiffColorType, int, int, int, TiffCompression, TiffPredictor)> RoundTripCases()
     {
-        TiffColorType[] types = [TiffColorType.Grayscale, TiffColorType.GrayscaleAlpha, TiffColorType.Rgb, TiffColorType.Rgba, TiffColorType.Palette];
-        (int, int)[] sizes = [(1, 1), (7, 3), (13, 1), (33, 17), (1, 40)];
+        TiffColorType[] types = [TiffColorType.Grayscale, TiffColorType.GrayscaleAlpha, TiffColorType.Rgb, TiffColorType.Rgba, TiffColorType.Palette, TiffColorType.BlackWhite];
+        (int, int)[] sizes = [(1, 1), (7, 3), (13, 1), (33, 17), (1, 40), (16, 9)];
         foreach (TiffColorType type in types)
         {
             foreach ((int width, int height) in sizes)
@@ -26,6 +27,12 @@ public sealed class EncoderTests
                 {
                     foreach ((TiffCompression compression, TiffPredictor predictor) in Compressions)
                     {
+                        bool bilevel = type == TiffColorType.BlackWhite;
+                        if ((compression == TiffCompression.CcittGroup4 && !bilevel) || (bilevel && predictor == TiffPredictor.Horizontal))
+                        {
+                            continue;
+                        }
+
                         yield return (type, width, height, rows, compression, predictor);
                     }
                 }
@@ -73,6 +80,67 @@ public sealed class EncoderTests
             long stored = EncoderSupport.Tags(file)[279].Value;
             await Assert.That(stored).IsLessThan(source == flat ? raw / 50 : raw + (raw / 2));
         }
+    }
+
+    [Test]
+    [Arguments(TiffCompression.None)]
+    [Arguments(TiffCompression.PackBits)]
+    [Arguments(TiffCompression.Lzw)]
+    [Arguments(TiffCompression.Deflate)]
+    [Arguments(TiffCompression.CcittGroup4)]
+    public async Task BlackWhite_WorstCaseAndLongRuns_RoundTrip(TiffCompression compression)
+    {
+        // Random pixels change colour at every other pixel; a 6000-pixel row needs make-up codes beyond 2560.
+        using Image noise = EncoderSupport.Bilevel(1001, 300, noise: true);
+        using Image wide = EncoderSupport.Bilevel(6000, 40);
+        foreach (Image source in new[] { noise, wide })
+        {
+            byte[] file = source.ToTiff(EncoderSupport.Options(TiffColorType.BlackWhite, compression: compression));
+            using Image decoded = TestSupport.Load(file);
+            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            var tags = EncoderSupport.Tags(file);
+            await Assert.That((tags[258].Value, tags[262].Value)).IsEqualTo((1u, 0u));
+        }
+    }
+
+    [Test]
+    public async Task Auto_ChoosesBlackWhiteForBilevelImages()
+    {
+        using Image source = EncoderSupport.Bilevel(40, 30);
+        var tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw)));
+        await Assert.That((tags[258].Value, tags[262].Value, tags.ContainsKey(317))).IsEqualTo((1u, 0u, false));
+
+        // An explicit predictor needs 8-bit samples, so the image stays grey.
+        tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw, predictor: TiffPredictor.Horizontal)));
+        await Assert.That((tags[258].Value, tags[262].Value, tags[317].Value)).IsEqualTo((8u, 1u, 2u));
+
+        // One grey pixel keeps it grey.
+        source.GetPixelSpan()[5] = new Rgba32(128, 128, 128, 255);
+        tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options()));
+        await Assert.That(tags[258].Value).IsEqualTo(8u);
+    }
+
+    [Test]
+    public async Task Group4_WithAutoColour_ThresholdsTheLuminance()
+    {
+        using Image source = EncoderSupport.Pattern(33, 17, alpha: true);
+        byte[] file = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.CcittGroup4));
+        var tags = EncoderSupport.Tags(file);
+        await Assert.That((tags[258].Value, tags[259].Value, tags[262].Value, tags.ContainsKey(338))).IsEqualTo((1u, 4u, 0u, false));
+        using Image decoded = TestSupport.Load(file);
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite)));
+    }
+
+    [Test]
+    [Arguments(TiffColorType.Grayscale, TiffCompression.CcittGroup4, TiffPredictor.Auto)]
+    [Arguments(TiffColorType.Rgba, TiffCompression.CcittGroup4, TiffPredictor.Auto)]
+    [Arguments(TiffColorType.BlackWhite, TiffCompression.CcittGroup4, TiffPredictor.Horizontal)]
+    [Arguments(TiffColorType.BlackWhite, TiffCompression.Lzw, TiffPredictor.Horizontal)]
+    [Arguments(TiffColorType.BlackWhite, TiffCompression.Deflate, TiffPredictor.Horizontal)]
+    public async Task InvalidBilevelCombinations_Throw(TiffColorType colorType, TiffCompression compression, TiffPredictor predictor)
+    {
+        using Image source = EncoderSupport.Bilevel(8, 8);
+        await Assert.That(() => source.ToTiff(EncoderSupport.Options(colorType, compression: compression, predictor: predictor))).Throws<ArgumentException>();
     }
 
     [Test]

@@ -2,7 +2,7 @@ namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
 /// Options for the TIFF encoder, which writes the first frame as one little-endian classic TIFF page in strips with
-/// contiguous 8-bit samples, by default LZW-compressed with the horizontal predictor. Resolution is always written (in dots per inch); ICC and XMP blocks are written as tags
+/// contiguous 8-bit (or 1-bit black-and-white) samples, by default LZW-compressed with the horizontal predictor. Resolution is always written (in dots per inch); ICC and XMP blocks are written as tags
 /// 34675 and 700 when <see cref="EncoderOptions.Metadata"/> allows them.
 /// </summary>
 /// <example>
@@ -24,8 +24,10 @@ public sealed record TiffEncoderOptions : EncoderOptions
 
     /// <summary>
     /// The predictor applied before compression. <see cref="TiffPredictor.Horizontal"/> with
-    /// <see cref="TiffCompression.None"/> or <see cref="TiffCompression.PackBits"/> makes saving fail with
-    /// <see cref="ArgumentException"/>. Default: <see cref="TiffPredictor.Auto"/>.
+    /// <see cref="TiffCompression.None"/>, <see cref="TiffCompression.PackBits"/>,
+    /// <see cref="TiffCompression.CcittGroup4"/> or <see cref="TiffColorType.BlackWhite"/> makes saving fail with
+    /// <see cref="ArgumentException"/>; with <see cref="TiffColorType.Auto"/> it keeps black-and-white images grey. Default:
+    /// <see cref="TiffPredictor.Auto"/>.
     /// </summary>
     public TiffPredictor Predictor
     {

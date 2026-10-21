@@ -45,6 +45,37 @@ internal static class EncoderSupport
         return image;
     }
 
+    /// <summary>
+    /// Opaque black-and-white shapes: rings, a diagonal band, a long white run and, with <paramref name="noise"/>, random
+    /// pixels in the bottom half (the worst case for fax coding).
+    /// </summary>
+    public static Image Bilevel(int width, int height, bool noise = false)
+    {
+        var image = new Image(width, height);
+        var random = new Random(width + height);
+        Span<Rgba32> pixels = image.GetPixelSpan();
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int dx = x - (width / 2), dy = y - (height / 2);
+                bool black = (((dx * dx) + (dy * dy)) / 50 % 3 == 0) || Math.Abs(x - (2 * y)) < 3;
+                if (y == height / 3)
+                {
+                    black = x == width - 1;
+                }
+                else if (noise && y > height / 2)
+                {
+                    black = random.Next(2) == 0;
+                }
+
+                pixels[(y * width) + x] = black ? new Rgba32(0, 0, 0, 255) : new Rgba32(255, 255, 255, 255);
+            }
+        }
+
+        return image;
+    }
+
     /// <summary>Opaque random pixels from a fixed seed; <paramref name="gray"/> makes R = G = B.</summary>
     public static Image Noise(int width, int height, bool gray = false)
     {
@@ -73,6 +104,7 @@ internal static class EncoderSupport
                 TiffColorType.Grayscale => new Rgba32(gray, gray, gray, 255),
                 TiffColorType.GrayscaleAlpha => new Rgba32(gray, gray, gray, p.A),
                 TiffColorType.Rgb or TiffColorType.Palette => p with { A = 255 },
+                TiffColorType.BlackWhite => gray < 128 ? new Rgba32(0, 0, 0, 255) : new Rgba32(255, 255, 255, 255),
                 _ => p,
             };
         }

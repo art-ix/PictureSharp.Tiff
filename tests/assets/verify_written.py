@@ -9,7 +9,7 @@ Pillow must read the same pixels and metadata. libtiff must open the file withou
 same ICC profile, and convert it with TIFFReadRGBAImage to the same pixels. libtiff premultiplies RGB with unassociated
 alpha, (a * v + 127) / 255 as its UaToAa table computes, but passes grey with alpha through (putagreytile).
 
-For LZW and PackBits files, libtiff also writes the decoded strips again with the same layout, compression and
+For LZW, PackBits and CCITT Group 4 files, libtiff also writes the decoded strips again with the same layout, compression and
 predictor (TIFFWriteEncodedStrip); its raw strips must equal ours byte for byte.
 """
 
@@ -47,10 +47,10 @@ lib.TIFFWriteEncodedStrip.restype = ctypes.c_int64
 IMAGEWIDTH, IMAGELENGTH, BITSPERSAMPLE, COMPRESSION, PHOTOMETRIC = 256, 257, 258, 259, 262
 SAMPLESPERPIXEL, ROWSPERSTRIP, PLANARCONFIG, PREDICTOR, EXTRASAMPLES = 277, 278, 284, 317, 338
 XMLPACKET, ICCPROFILE = 700, 34675
-LZW, DEFLATE, PACKBITS = 5, 8, 32773
+CCITT_G4, LZW, DEFLATE, PACKBITS = 4, 5, 8, 32773
 
 messages = []
-totals = {LZW: 0, PACKBITS: 0}
+totals = {LZW: 0, PACKBITS: 0, CCITT_G4: 0}
 HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p)
 
 
@@ -115,7 +115,8 @@ def libtiff_reencode(path, layout, strips):
         for tag in (IMAGEWIDTH, IMAGELENGTH, ROWSPERSTRIP):
             lib.TIFFSetField(tif, tag, ctypes.c_uint32(layout[tag]))
         for tag, value in ((BITSPERSAMPLE, layout[BITSPERSAMPLE]), (SAMPLESPERPIXEL, spp), (PLANARCONFIG, 1),
-                           (PHOTOMETRIC, 1 if spp <= 2 else 2), (COMPRESSION, layout[COMPRESSION])):
+                           (PHOTOMETRIC, (0 if layout[BITSPERSAMPLE] == 1 else 1) if spp <= 2 else 2),
+                           (COMPRESSION, layout[COMPRESSION])):
             lib.TIFFSetField(tif, tag, ctypes.c_int(value))
         if layout[PREDICTOR] != 1:
             lib.TIFFSetField(tif, PREDICTOR, ctypes.c_int(layout[PREDICTOR]))
@@ -188,7 +189,7 @@ def verify(path, entry):
         errors.append("libtiff XMP differs")
 
     layout, ours = read_strips(path, raw=True)
-    if layout[COMPRESSION] in (LZW, PACKBITS):
+    if layout[COMPRESSION] in totals:
         theirs = libtiff_reencode(path, layout, read_strips(path, raw=False)[1])
         if messages:
             errors.append("libtiff re-encoding: " + "; ".join(messages))
@@ -210,7 +211,7 @@ def main():
         print(f"{'FAIL' if errors else 'ok  '} {name}" + ("".join(f"\n     {e}" for e in errors)))
         failed += bool(errors)
     print(f"{len(manifest) - failed}/{len(manifest)} files verified; strips identical to libtiff: "
-          f"LZW {totals[LZW]} bytes, PackBits {totals[PACKBITS]} bytes")
+          f"LZW {totals[LZW]} bytes, PackBits {totals[PACKBITS]} bytes, Group 4 {totals[CCITT_G4]} bytes")
     sys.exit(1 if failed else 0)
 
 

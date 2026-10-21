@@ -296,6 +296,105 @@
     "icc": null,
     "xmp": null
   },
+  "bw_61x40_g4.tif": {
+    "width": 61,
+    "height": 40,
+    "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_noise_200x80_g4_rows16.tif": {
+    "width": 200,
+    "height": 80,
+    "sha256": "31928dbc851c965ada91d67c48844b706d6589c5b682936142faf8e4ad164ec1",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_wide_6000x12_g4.tif": {
+    "width": 6000,
+    "height": 12,
+    "sha256": "5aba595b82b24379541f8ce487ccf626f370ad3f6757630a2b4fa599b0793246",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_from_rgba_33x17_g4.tif": {
+    "width": 33,
+    "height": 17,
+    "sha256": "b93ba3b9d1c4a2b1f02f85d68fe095d90975f2c715c93025ae01b3ca41670106",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_61x40.tif": {
+    "width": 61,
+    "height": 40,
+    "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_61x40_packbits_rows7.tif": {
+    "width": 61,
+    "height": 40,
+    "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_61x40_lzw.tif": {
+    "width": 61,
+    "height": 40,
+    "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_61x40_deflate.tif": {
+    "width": 61,
+    "height": 40,
+    "sha256": "5bfda44ef396fcfd0bb9e87ea6ddc63681293ded44b8d3e5bb6bfc1150760c03",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_from_gray_33x17.tif": {
+    "width": 33,
+    "height": 17,
+    "sha256": "2f7c4cde84a540083df53e0dd6580d07d7128f3cb714948ac5d5001a4f8daa82",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
   "gray_7x3_deflate_level0.tif": {
     "width": 7,
     "height": 3,
