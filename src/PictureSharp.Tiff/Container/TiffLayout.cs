@@ -23,6 +23,7 @@ internal sealed class TiffLayout
     public const int CompressionCcittRlew = 32771;
     public const int CompressionPackBits = 32773;
     public const int CompressionDeflateOld = 32946;
+    public const int CompressionWebP = 50001;
 
     public const int FormatUnsigned = 1;
     public const int FormatFloat = 3;
@@ -241,7 +242,7 @@ internal sealed class TiffLayout
         string? name = Compression switch
         {
             CompressionNone or CompressionCcittRle or CompressionCcittFax3 or CompressionCcittFax4 or CompressionLzw or CompressionJpeg
-                or CompressionDeflate or CompressionCcittRlew or CompressionPackBits or CompressionDeflateOld => null,
+                or CompressionDeflate or CompressionCcittRlew or CompressionPackBits or CompressionDeflateOld or CompressionWebP => null,
             6 => "old-style JPEG (6)",
             9 or 10 or 34661 => "JBIG",
             32809 => "ThunderScan",
@@ -251,7 +252,6 @@ internal sealed class TiffLayout
             34887 => "LERC",
             34925 => "LZMA",
             50000 => "Zstandard",
-            50001 => "WebP",
             _ => $"{Compression}",
         };
         if (name is not null)
@@ -268,6 +268,25 @@ internal sealed class TiffLayout
             || Photometric is not (BlackIsZero or Rgb or YCbCr)))
         {
             throw new NotSupportedException($"JPEG-compressed TIFF images are only supported as contiguous 8-bit greyscale, RGB or YCbCr, not photometric {Photometric} with {SamplesPerPixel} samples.");
+        }
+
+        // port: libtiff/tif_webp.c TWebPSetupDecode, TWebPFixupTags and TWebPPreDecode reject these as errors.
+        if (Compression == CompressionWebP)
+        {
+            if (SamplesPerPixel is not (3 or 4) || BitsPerSample != 8 || SampleFormat != FormatUnsigned || Separate)
+            {
+                throw TiffDecoder.Error($"A WebP-compressed TIFF image must have 3 or 4 contiguous 8-bit unsigned samples, not {SamplesPerPixel} of {BitsPerSample} bits.");
+            }
+
+            if (ChunkWidth > Codecs.TiffWebP.MaxSide || ChunkHeight > Codecs.TiffWebP.MaxSide)
+            {
+                throw TiffDecoder.Error($"The TIFF WebP strip or tile size {ChunkWidth}x{ChunkHeight} exceeds the WebP limit of {Codecs.TiffWebP.MaxSide}.");
+            }
+
+            if (Photometric != Rgb)
+            {
+                throw new NotSupportedException($"WebP-compressed TIFF images are only supported as RGB, not photometric {Photometric}.");
+            }
         }
     }
 

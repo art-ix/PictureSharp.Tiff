@@ -31,4 +31,14 @@ public enum TiffCompression
     /// to black and white, and any other colour type makes saving fail with <see cref="ArgumentException"/>.
     /// </summary>
     CcittGroup4,
+
+    /// <summary>
+    /// WebP (Compression 50001, as libtiff writes it), through the PictureSharp WebP encoder: each strip is a complete
+    /// WebP stream, lossy with <see cref="TiffEncoderOptions.WebPQuality"/> or lossless with
+    /// <see cref="TiffEncoderOptions.WebPLossless"/>. Read by libtiff built with libwebp, GDAL and Pillow, but not by
+    /// most other TIFF readers. It writes only <see cref="TiffColorType.Rgb"/> or <see cref="TiffColorType.Rgba"/>:
+    /// <see cref="TiffColorType.Auto"/> adds alpha only when a pixel is not opaque, and any other colour type makes saving
+    /// fail with <see cref="ArgumentException"/>. Strips hold at most 16383 rows, and the width cannot exceed 16383.
+    /// </summary>
+    WebP,
 }

@@ -17,15 +17,19 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Boolean Equals(PictureSharp.EncoderOptions)
   Boolean Equals(PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Boolean Equals(System.Object)
+  Boolean WebPLossless
+  Boolean get_WebPLossless()
   Boolean op_Equality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Int32 DeflateLevel
   Int32 GetHashCode()
   Int32 JpegQuality
   Int32 RowsPerStrip
+  Int32 WebPQuality
   Int32 get_DeflateLevel()
   Int32 get_JpegQuality()
   Int32 get_RowsPerStrip()
+  Int32 get_WebPQuality()
   PictureSharp.Formats.Jpeg.JpegSubsampling JpegSubsampling
   PictureSharp.Formats.Jpeg.JpegSubsampling get_JpegSubsampling()
   PictureSharp.Formats.Tiff.TiffColorType ColorType
@@ -46,6 +50,8 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Void set_JpegSubsampling(PictureSharp.Formats.Jpeg.JpegSubsampling)
   Void set_Predictor(PictureSharp.Formats.Tiff.TiffPredictor)
   Void set_RowsPerStrip(Int32)
+  Void set_WebPLossless(Boolean)
+  Void set_WebPQuality(Int32)
 PictureSharp.Formats.Tiff.TiffFormat
   Boolean IsSupported(System.ReadOnlySpan`1[System.Byte])
   Int32 HeaderSize

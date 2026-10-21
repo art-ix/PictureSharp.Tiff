@@ -14,6 +14,7 @@
     <None Include="../assets/PublicApi.approved.txt" Link="PublicApi.approved.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/reference.json" Link="reference.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/jpeg.json" Link="jpeg.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../assets/webp.json" Link="webp.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/written/**" Link="written/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/corpus/**" Link="corpus/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

@@ -6,7 +6,8 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// <summary>
 /// Decodes strips or tiles one at a time: every plane of a chunk is decompressed and un-predicted into a pooled
 /// buffer, then a <see cref="TiffChunkConverter"/> writes its visible pixels, so planar images need no full copy.
-/// JPEG chunks are decoded by the configuration's JPEG codec instead (<see cref="TiffJpeg"/>).
+/// JPEG chunks are decoded by the configuration's JPEG codec instead (<see cref="TiffJpeg"/>), and WebP chunks by its WebP
+/// codec into the same buffer (<see cref="TiffWebP"/>).
 /// </summary>
 internal static class TiffPixelDecoder
 {
@@ -64,7 +65,7 @@ internal static class TiffPixelDecoder
                     Span<byte> output = buffer.AsSpan(p * planeBytes, (int)layout.ChunkBytes(rows));
                     ulong offset = ifd.GetULong(bytes, offsets, index);
                     ulong count = hasCounts ? ifd.GetULong(bytes, counts, index) : (ulong)output.Length;
-                    Decompress(Raw(data, offset, count), layout, lzw, fax, output);
+                    Decompress(Raw(data, offset, count), layout, lzw, fax, context, rows, output);
                     if (layout.EffectivePredictor == 2)
                     {
                         HorizontalPredictor.Decode(output, rowBytes, layout.Separate ? 1 : spp, layout.BitsPerSample, ifd.BigEndian);
@@ -103,7 +104,8 @@ internal static class TiffPixelDecoder
         return data.Slice((int)offset, (int)Math.Min(count, available));
     }
 
-    private static void Decompress(ReadOnlyMemory<byte> raw, TiffLayout layout, LzwDecoder? lzw, FaxDecoder? fax, Span<byte> output)
+    private static void Decompress(ReadOnlyMemory<byte> raw, TiffLayout layout, LzwDecoder? lzw, FaxDecoder? fax, ImageDecodeContext context,
+        int rows, Span<byte> output)
     {
         byte[]? reversed = null;
         try
@@ -134,6 +136,9 @@ internal static class TiffPixelDecoder
                     break;
                 case TiffLayout.CompressionDeflate or TiffLayout.CompressionDeflateOld:
                     DeflateDecoder.Decode(raw, output);
+                    break;
+                case TiffLayout.CompressionWebP:
+                    TiffWebP.Decode(raw, context, layout, rows, output);
                     break;
                 default:
                     fax!.Decode(raw.Span, output);

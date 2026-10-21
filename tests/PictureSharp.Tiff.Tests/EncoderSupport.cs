@@ -133,13 +133,20 @@ internal static class EncoderSupport
     /// Whether each JPEG strip of <paramref name="file"/> is a complete stream with <paramref name="components"/>
     /// components that the core JPEG decoder decodes to the same pixels as <paramref name="image"/>.
     /// </summary>
-    public static bool JpegStripsMatch(byte[] file, Image image, int components)
+    public static bool JpegStripsMatch(byte[] file, Image image, int components) =>
+        Strips(file).All(strip => JpegComponents(strip) == components) && StripsMatch(file, image);
+
+    /// <summary>
+    /// Whether each strip of <paramref name="file"/> is a complete image stream (JPEG or WebP) of the strip's own rows
+    /// that the core decodes to the same pixels as <paramref name="image"/>.
+    /// </summary>
+    public static bool StripsMatch(byte[] file, Image image)
     {
         int rowsPerStrip = (int)Tags(file)[278].Value, y0 = 0;
         foreach (byte[] strip in Strips(file))
         {
             using Image part = Image.Load(strip, TestSupport.Options);
-            if (JpegComponents(strip) != components || part.Width != image.Width || part.Height != Math.Min(rowsPerStrip, image.Height - y0)
+            if (part.Width != image.Width || part.Height != Math.Min(rowsPerStrip, image.Height - y0)
                 || !part.GetPixelSpan().SequenceEqual(image.GetPixelSpan().Slice(y0 * image.Width, part.Width * part.Height)))
             {
                 return false;

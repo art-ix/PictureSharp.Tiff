@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using PictureSharp.Formats.Jpeg;
 using PictureSharp.Formats.Tiff.Codecs;
 using PictureSharp.Formats.Tiff.Container;
+using PictureSharp.Formats.WebP;
 
 namespace PictureSharp.Formats.Tiff;
 
@@ -59,6 +60,16 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new NotSupportedException($"JPEG compression supports widths up to {JpegMaxWidth}.");
         }
 
+        if (compression == TiffCompression.WebP && options.ColorType is not (TiffColorType.Auto or TiffColorType.Rgb or TiffColorType.Rgba))
+        {
+            throw new ArgumentException("WebP compression writes only RGB or RGBA images.", nameof(options));
+        }
+
+        if (compression == TiffCompression.WebP && image.Width > TiffWebP.MaxSide)
+        {
+            throw new NotSupportedException($"WebP compression supports widths up to {TiffWebP.MaxSide}.");
+        }
+
         if (options.Predictor == TiffPredictor.Horizontal && options.ColorType == TiffColorType.BlackWhite)
         {
             throw new ArgumentException("The horizontal predictor applies only to 8-bit samples, not black and white.", nameof(options));
@@ -69,6 +80,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         TiffColorType colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
             : compression == TiffCompression.CcittGroup4 ? TiffColorType.BlackWhite
             : compression == TiffCompression.Jpeg ? (IsGray(pixels) ? TiffColorType.Grayscale : TiffColorType.Rgb)
+            : compression == TiffCompression.WebP ? (IsOpaque(pixels) ? TiffColorType.Rgb : TiffColorType.Rgba)
             : Choose(pixels, bilevel: options.Predictor != TiffPredictor.Horizontal, out palette);
         if (colorType == TiffColorType.Palette && palette is null)
         {
@@ -96,6 +108,11 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         int rowsPerStrip = options.RowsPerStrip > 0
             ? (int)Math.Min((options.RowsPerStrip + (long)block - 1) / block * block, height)
             : (int)Math.Min(Math.Max(StripTarget / rowBytes / block, 1) * block, height);
+        if (compression == TiffCompression.WebP)
+        {
+            rowsPerStrip = Math.Min(rowsPerStrip, TiffWebP.MaxSide);
+        }
+
         int strips = (int)(((long)height + rowsPerStrip - 1) / rowsPerStrip);
         var offsets = new uint[strips];
         var counts = new uint[strips];
@@ -142,6 +159,17 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             Metadata = MetadataKinds.None,
             Configuration = options.Configuration,
         };
+        // port: libtiff/tif_webp.c TWebPSetupEncode: the default preset at the given quality; lossless keeps the colour
+        // under transparent pixels (libtiff leaves that to libwebp's default).
+        WebPEncoderOptions? webpOptions = compression != TiffCompression.WebP ? null : new WebPEncoderOptions
+        {
+            Quality = options.WebPQuality,
+            Lossless = options.WebPLossless,
+            Exact = options.WebPLossless,
+            Metadata = MetadataKinds.None,
+            Configuration = options.Configuration,
+        };
+        using MemoryStream? webp = webpOptions is null ? null : new MemoryStream();
         using DeflateEncoder? deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
         long position = 8;
         try
@@ -151,7 +179,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                 cancellationToken.ThrowIfCancellationRequested();
                 int y0 = s * rowsPerStrip, rows = Math.Min(rowsPerStrip, height - y0);
                 Span<byte> samples = strip.AsSpan(0, (int)(rows * rowBytes));
-                for (int y = 0; y < (jpeg is null ? rows : 0); y++)
+                for (int y = 0; y < (jpeg is null && webp is null ? rows : 0); y++)
                 {
                     ReadOnlySpan<Rgba32> row = pixels.Slice((y0 + y) * width, width);
                     Span<byte> target = samples.Slice((int)(y * rowBytes), (int)rowBytes);
@@ -180,7 +208,9 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                     TiffCompression.Lzw => packed.AsSpan(0, lzw!.Encode(samples, packed)),
                     TiffCompression.Deflate => deflate!.Encode(samples),
                     TiffCompression.CcittGroup4 => fax4!.Encode(samples, (int)rowBytes, width),
-                    TiffCompression.Jpeg => EncodeJpeg(pixels.Slice(y0 * width, rows * width), width, rows, jpeg!, jpegOptions!, cancellationToken),
+                    TiffCompression.Jpeg => EncodePart(pixels.Slice(y0 * width, rows * width), width, rows, alpha: false, jpeg!, jpegOptions!, cancellationToken),
+                    TiffCompression.WebP => EncodePart(pixels.Slice(y0 * width, rows * width), width, rows, colorType == TiffColorType.Rgba, webp!,
+                        webpOptions!, cancellationToken),
                     _ => samples,
                 };
                 if (Align(position + data.Length) + ifdSize > uint.MaxValue)
@@ -286,20 +316,43 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         return true;
     }
 
+    /// <summary>Whether every pixel is opaque.</summary>
+    private static bool IsOpaque(ReadOnlySpan<Rgba32> pixels)
+    {
+        foreach (Rgba32 p in pixels)
+        {
+            if (p.A != 255)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>
-    /// One strip as a complete JPEG stream. Alpha is dropped rather than composited, as for the other compressions, and
-    /// the colour mode is fixed so that a grey strip of a colour image still has the three components the IFD declares.
+    /// One strip as a complete JPEG or WebP stream. Without <paramref name="alpha"/>, alpha is dropped rather than
+    /// composited, as for the other compressions; for JPEG the colour mode is fixed so that a grey strip of a colour image
+    /// still has the three components the IFD declares.
     /// </summary>
     // port: libtiff/tif_jpeg.c JPEGSetupEncode and JPEGEncode write one interchange stream per strip when no JPEGTables
-    // are shared; libtiff itself shares the tables, which TTN2 leaves optional.
-    private static ReadOnlySpan<byte> EncodeJpeg(ReadOnlySpan<Rgba32> pixels, int width, int rows, MemoryStream output,
-        JpegEncoderOptions options, CancellationToken cancellationToken)
+    // are shared; libtiff itself shares the tables, which TTN2 leaves optional. libtiff/tif_webp.c TWebPPostEncode
+    // encodes each strip as one WebP stream of the strip's own rows.
+    private static ReadOnlySpan<byte> EncodePart(ReadOnlySpan<Rgba32> pixels, int width, int rows, bool alpha, MemoryStream output,
+        EncoderOptions options, CancellationToken cancellationToken)
     {
         using var part = new Image(width, rows);
         Span<Rgba32> target = part.GetPixelSpan();
-        for (int i = 0; i < target.Length; i++)
+        if (alpha)
         {
-            target[i] = pixels[i] with { A = 255 };
+            pixels.CopyTo(target);
+        }
+        else
+        {
+            for (int i = 0; i < target.Length; i++)
+            {
+                target[i] = pixels[i] with { A = 255 };
+            }
         }
 
         output.SetLength(0);
@@ -321,6 +374,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             TiffCompression.Deflate => (ushort)8,
             TiffCompression.Jpeg => (ushort)7,
             TiffCompression.CcittGroup4 => (ushort)4,
+            TiffCompression.WebP => (ushort)50001,
             _ => (ushort)1,
         });
         ifd.AddShort(TiffTag.Photometric, layout.ColorType switch

@@ -4,9 +4,12 @@ public sealed class RobustnessTests
 {
     public static IEnumerable<string> Files() => TestSupport.Files();
 
+    /// <summary>The reference corpus plus the JPEG and WebP files, whose strips the core codecs decode.</summary>
+    public static IEnumerable<string> AllFiles() => Files().Concat(JpegTests.Files()).Concat(WebPTests.Files());
+
     [Test]
     [Property("Category", "Slow")]
-    [MethodDataSource(nameof(Files))]
+    [MethodDataSource(nameof(AllFiles))]
     public async Task MutatedInput_FailsOnlyWithContractExceptions(string name)
     {
         byte[] original = TestSupport.ReadCorpus(name);
@@ -35,7 +38,7 @@ public sealed class RobustnessTests
     }
 
     [Test]
-    [MethodDataSource(nameof(Files))]
+    [MethodDataSource(nameof(AllFiles))]
     public async Task EveryTruncation_FailsOnlyWithContractExceptions(string name)
     {
         byte[] original = TestSupport.ReadCorpus(name);

@@ -1,0 +1,132 @@
+{
+ "webp_rgb_lossless_be.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "webp/webp_rgb_lossless_be.0.webp",
+    0,
+    0,
+    64,
+    16
+   ],
+   [
+    "webp/webp_rgb_lossless_be.1.webp",
+    0,
+    16,
+    64,
+    16
+   ],
+   [
+    "webp/webp_rgb_lossless_be.2.webp",
+    0,
+    32,
+    64,
+    16
+   ]
+  ],
+  "pillow": "webp/webp_rgb_lossless_be.pillow.png",
+  "lossless": true
+ },
+ "webp_rgb_lossy_strips.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "webp/webp_rgb_lossy_strips.0.webp",
+    0,
+    0,
+    64,
+    20
+   ],
+   [
+    "webp/webp_rgb_lossy_strips.1.webp",
+    0,
+    20,
+    64,
+    20
+   ],
+   [
+    "webp/webp_rgb_lossy_strips.2.webp",
+    0,
+    40,
+    64,
+    8
+   ]
+  ],
+  "pillow": "webp/webp_rgb_lossy_strips.pillow.png",
+  "lossless": false
+ },
+ "webp_rgba_lossless_strips.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "webp/webp_rgba_lossless_strips.0.webp",
+    0,
+    0,
+    64,
+    13
+   ],
+   [
+    "webp/webp_rgba_lossless_strips.1.webp",
+    0,
+    13,
+    64,
+    13
+   ],
+   [
+    "webp/webp_rgba_lossless_strips.2.webp",
+    0,
+    26,
+    64,
+    13
+   ],
+   [
+    "webp/webp_rgba_lossless_strips.3.webp",
+    0,
+    39,
+    64,
+    9
+   ]
+  ],
+  "pillow": "webp/webp_rgba_lossless_strips.pillow.png",
+  "lossless": true
+ },
+ "webp_rgba_lossy_tiles.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "webp/webp_rgba_lossy_tiles.0.webp",
+    0,
+    0,
+    32,
+    32
+   ],
+   [
+    "webp/webp_rgba_lossy_tiles.1.webp",
+    32,
+    0,
+    32,
+    32
+   ],
+   [
+    "webp/webp_rgba_lossy_tiles.2.webp",
+    0,
+    32,
+    32,
+    16
+   ],
+   [
+    "webp/webp_rgba_lossy_tiles.3.webp",
+    32,
+    32,
+    32,
+    16
+   ]
+  ],
+  "pillow": "webp/webp_rgba_lossy_tiles.pillow.png",
+  "lossless": false
+ }
+}

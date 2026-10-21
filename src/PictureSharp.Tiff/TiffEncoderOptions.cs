@@ -62,6 +62,22 @@ public sealed record TiffEncoderOptions : EncoderOptions
         init => field = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(JpegSubsampling), value, "Unknown JPEG subsampling.");
     } = Formats.Jpeg.JpegSubsampling.Ratio420;
 
+    /// <summary>
+    /// The quality of lossy <see cref="TiffCompression.WebP"/>, 1 to 100, as for the WebP encoder; for lossless WebP,
+    /// the compression effort. Default: 75, as libtiff.
+    /// </summary>
+    public int WebPQuality
+    {
+        get;
+        init => field = value is >= 1 and <= 100 ? value : throw new ArgumentOutOfRangeException(nameof(WebPQuality), value, "The WebP quality must be between 1 and 100.");
+    } = 75;
+
+    /// <summary>
+    /// Whether <see cref="TiffCompression.WebP"/> strips are lossless (VP8L), which keeps every value, including the
+    /// colour of fully transparent pixels. Default: false, as libtiff.
+    /// </summary>
+    public bool WebPLossless { get; init; }
+
     /// <summary>The samples to write. Default: <see cref="TiffColorType.Auto"/>.</summary>
     public TiffColorType ColorType
     {

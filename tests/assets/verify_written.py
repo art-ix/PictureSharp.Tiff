@@ -9,8 +9,9 @@ Pillow must read the same pixels and metadata. libtiff must open the file withou
 same ICC profile, and convert it with TIFFReadRGBAImage to the same pixels. libtiff premultiplies RGB with unassociated
 alpha, (a * v + 127) / 255 as its UaToAa table computes, but passes grey with alpha through (putagreytile).
 
-JPEG files differ slightly between decoders (IDCT, chroma upsampling): for them written.json names our decode as a PNG,
-and Pillow and libtiff must stay within the tolerance of JpegTests (mean difference below 1.5, at most 24) instead.
+JPEG files differ slightly between decoders (IDCT, chroma upsampling): for them and for lossy WebP files written.json
+names our decode as a PNG, and Pillow and libtiff must stay within the tolerance of JpegTests (mean difference below
+1.5, at most 24) with the same alpha instead.
 
 For LZW, PackBits and CCITT Group 4 files, libtiff also writes the decoded strips again with the same layout, compression and
 predictor (TIFFWriteEncodedStrip); its raw strips must equal ours byte for byte.
@@ -207,9 +208,10 @@ def premultiply(rgba):
 
 
 def close(a, b):
-    """Whether two RGBA rasters are within the JPEG tolerance on RGB."""
+    """Whether two RGBA rasters are within the JPEG tolerance on RGB and have the same alpha."""
     d = np.abs(a[..., :3].astype(np.int32) - b[..., :3].astype(np.int32)).max(axis=2)
-    return d.mean() < 1.5 and d.max() <= 24, f"mean {d.mean():.3f}, max {d.max()}"
+    same_alpha = np.array_equal(a[..., 3], b[..., 3])
+    return d.mean() < 1.5 and d.max() <= 24 and same_alpha, f"mean {d.mean():.3f}, max {d.max()}, alpha {'same' if same_alpha else 'differs'}"
 
 
 def pillow_exif(path, software, page=0):
@@ -391,7 +393,7 @@ def verify(path, entry):
     if messages:
         errors.append("libtiff: " + "; ".join(messages))
     if ours is not None:
-        ok, detail = close(raster, ours)
+        ok, detail = close(raster, premultiply(ours) if premultiplied else ours)
         if not ok:
             errors.append(f"libtiff pixels not close: {detail}")
     elif not np.array_equal(raster, premultiply(pil) if premultiplied else pil):

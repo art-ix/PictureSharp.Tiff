@@ -584,6 +584,71 @@
     "icc": null,
     "xmp": null
   },
+  "webp_rgb_lossless_33x17_rows5.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 33,
+    "height": 17,
+    "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "webp_rgba_lossless_40x30.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 40,
+    "height": 30,
+    "sha256": "61932df48485add87e6bba6c4d2edd03ad2f1680a0cbefb7c3b62071642623da",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "webp_gray_lossless_16x8.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 16,
+    "height": 8,
+    "sha256": "2dda8321f3c123bed735e4cf9b7b9128631b2a5e264959e319ce9045ce92125c",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "webp_rgb_lossy_96x64.tif": {
+    "decoded": "webp_rgb_lossy_96x64.decoded.png",
+    "exif": null,
+    "width": 96,
+    "height": 64,
+    "sha256": "c7f85ff82b280a4afc4eb19df72b3dabfefe5b3a34f1c76c06136a4185de0780",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "webp_rgba_lossy_70x41_q90_rows16.tif": {
+    "decoded": "webp_rgba_lossy_70x41_q90_rows16.decoded.png",
+    "exif": null,
+    "width": 70,
+    "height": 41,
+    "sha256": "f89cedca7a1ef7ba7fbf3989371da209b19d9355580e9c7197c7c9b64206dc5e",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
   "gray_7x3_deflate_level0.tif": {
     "decoded": null,
     "exif": null,

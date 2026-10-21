@@ -43,8 +43,8 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
 
 ## Reference data
 
-- Pixels must match `tests/assets/reference.json` exactly; JPEG files are listed in `tests/assets/jpeg.json` with
-  their strips as standalone JPEGs. Regenerate both with the system libtiff 4.5.1 (`libtiff.so.6`, the version Pillow
+- Pixels must match `tests/assets/reference.json` exactly; JPEG and WebP files are listed in `tests/assets/jpeg.json`
+  and `tests/assets/webp.json` with their strips as standalone JPEG or WebP streams. Regenerate them with the system libtiff 4.5.1 (`libtiff.so.6`, the version Pillow
   10.2.0 uses), Pillow 10.2.0 and ImageMagick 6 `convert`:
 
   ```bash
@@ -59,8 +59,8 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
   python3 -I tests/assets/verify_written.py tests/PictureSharp.Tiff.Tests/bin/Release/net10.0/written.received
   ```
 
-  The same script checks `written.corpus/`, where every test run writes the corpus re-encoded with PackBits, LZW, CCITT Group 4, JPEG and
-  Deflate (for LZW, PackBits and Group 4 it also requires strips byte-identical to libtiff's), and `written.edited/`,
+  The same script checks `written.corpus/`, where every test run writes the corpus re-encoded with PackBits, LZW, CCITT Group 4, JPEG,
+  lossless WebP and Deflate (for LZW, PackBits and Group 4 it also requires strips byte-identical to libtiff's), and `written.edited/`,
   where the corpus is rewritten by `Image.EditMetadata` next to the originals (libtiff must decode every IFD as before).
   Files with EXIF come with a JPEG carrying the same block (`name.exif.jpg`), which Pillow reads for comparison.
 

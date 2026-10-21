@@ -51,7 +51,9 @@ XRESOLUTION, YRESOLUTION, PLANARCONFIG, RESOLUTIONUNIT, PREDICTOR = 282, 283, 28
 COLORMAP, TILEWIDTH, TILELENGTH, EXTRASAMPLES, XMLPACKET, ICCPROFILE = 320, 322, 323, 338, 700, 34675
 GROUP3OPTIONS, GROUP4OPTIONS, INKSET, SAMPLEFORMAT = 292, 293, 332, 339
 YCBCRSUBSAMPLING, REFERENCEBLACKWHITE, JPEGQUALITY, JPEGCOLORMODE = 530, 532, 65537, 65538
-COMPRESSIONS = dict(none=1, lzw=5, deflate=8, packbits=32773, adobe=32946, jpeg=7, rle=2, g3=3, g4=4, rlew=32771)
+WEBP_LEVEL, WEBP_LOSSLESS = 65568, 65569
+COMPRESSIONS = dict(none=1, lzw=5, deflate=8, packbits=32773, adobe=32946, jpeg=7, rle=2, g3=3, g4=4, rlew=32771,
+                    webp=50001)
 PHOTOMETRICS = dict(miniswhite=0, minisblack=1, rgb=2, palette=3, cmyk=5, ycbcr=6)
 
 
@@ -157,7 +159,8 @@ def set_field(tif, tag, *args):
 def write_directory(tif, samples, bits, photometric, compression="none", predictor=1, rows_per_strip=None,
                     tile=None, separate=False, extra=None, colormap=None, fill_order=1, subfile=0,
                     orientation=None, resolution=None, icc=None, xmp=None, sample_format=1, t4=None, t6=None,
-                    jpeg_quality=None, jpeg_rgb=False, subsampling=None, ref_black_white=None):
+                    jpeg_quality=None, jpeg_rgb=False, subsampling=None, ref_black_white=None,
+                    webp_level=None, webp_lossless=False):
     h, w, spp = samples.shape
     keep = []
     set_field(tif, IMAGEWIDTH, ctypes.c_uint32(w))
@@ -179,6 +182,10 @@ def write_directory(tif, samples, bits, photometric, compression="none", predict
         set_field(tif, JPEGQUALITY, ctypes.c_int(jpeg_quality))
     if jpeg_rgb:
         set_field(tif, JPEGCOLORMODE, ctypes.c_int(1))
+    if webp_level:
+        set_field(tif, WEBP_LEVEL, ctypes.c_int(webp_level))
+    if webp_lossless:
+        set_field(tif, WEBP_LOSSLESS, ctypes.c_int(1))
     if subsampling:
         set_field(tif, YCBCRSUBSAMPLING, ctypes.c_int(subsampling[0]), ctypes.c_int(subsampling[1]))
     if ref_black_white:
@@ -544,6 +551,30 @@ def libtiff_rgba(path, directory=0):
         lib.TIFFClose(tif)
 
 
+def raw_chunks(path):
+    """Each strip or tile as stored, with its region (WebP chunks are standalone streams)."""
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    try:
+        w, h = get_u32(tif, IMAGEWIDTH), get_u32(tif, IMAGELENGTH)
+        if lib.TIFFIsTiled(tif):
+            cw, ch = get_u32(tif, TILEWIDTH), get_u32(tif, TILELENGTH)
+            n, read = lib.TIFFNumberOfTiles(tif), lib.TIFFReadRawTile
+        else:
+            cw, ch = w, min(get_u32(tif, ROWSPERSTRIP), h)
+            n, read = lib.TIFFNumberOfStrips(tif), lib.TIFFReadRawStrip
+        across = -(-w // cw)
+        out = []
+        for i in range(n):
+            size = lib.TIFFGetStrileByteCount(tif, i)
+            buf = ctypes.create_string_buffer(size)
+            read(tif, i, buf, size)
+            x, y = (i % across) * cw, (i // across) * ch
+            out.append((buf.raw[:size], x, y, min(cw, w - x), min(ch, h - y)))
+        return out
+    finally:
+        lib.TIFFClose(tif)
+
+
 def jpeg_chunks(path):
     """Each strip or tile as a standalone JPEG (JPEGTables without EOI + the chunk without SOI), with its region."""
     tif = lib.TIFFOpen(path.encode(), b"r")
@@ -705,6 +736,13 @@ def cases_030():
     gray_big = (big.astype(np.int64) @ [299, 587, 114] // 1000).astype(np.uint8)
     yield "jpeg_gray_be", [dict(samples=s(gray_big), bits=8, photometric="minisblack", compression="jpeg", rows_per_strip=24)], dict(big_endian=True), "jpeg"
 
+    # 0.4.5 WebP (libtiff tif_webp.c with the system libwebp): lossy and lossless, RGB and RGBA, strips and tiles.
+    big_rgba = np.dstack([big, alpha(64, 48)])
+    yield "webp_rgb_lossy_strips", [dict(samples=big, bits=8, photometric="rgb", compression="webp", webp_level=80, rows_per_strip=20)], {}, "webp"
+    yield "webp_rgba_lossy_tiles", [dict(samples=big_rgba, bits=8, photometric="rgb", extra=[2], compression="webp", tile=(32, 32))], {}, "webp"
+    yield "webp_rgb_lossless_be", [dict(samples=big, bits=8, photometric="rgb", compression="webp", webp_lossless=True, rows_per_strip=16)], dict(big_endian=True), "webp"
+    yield "webp_rgba_lossless_strips", [dict(samples=big_rgba, bits=8, photometric="rgb", extra=[2], compression="webp", webp_lossless=True, rows_per_strip=13)], {}, "webp"
+
     yield "bigtiff_rgb8_lzw", [dict(samples=rgb, bits=8, photometric="rgb", compression="lzw", predictor=2, rows_per_strip=5)], dict(big_tiff=True), "model"
     yield "bigtiff_gray16_tiles_be", [dict(samples=s((gray.astype(np.uint16) * 257)), bits=16, photometric="minisblack", tile=(16, 16))], dict(big_tiff=True, big_endian=True), "model"
     yield "bigtiff_pages", [dict(samples=rgb[::4, ::4].copy(), bits=8, photometric="rgb", subfile=1),
@@ -797,8 +835,9 @@ def main():
                   [rgb[y:y + 4].tobytes() for y in range(0, 11, 4)], byte_counts=False)
     record("rgb8_no_bytecounts", expected(rgb, 8, "rgb"), True)
 
-    jpeg_index = {}
+    jpeg_index, webp_index = {}, {}
     os.makedirs(os.path.join(CORPUS, "jpeg"))
+    os.makedirs(os.path.join(CORPUS, "webp"))
     for name, pages, opts, kind in cases_030():
         path = os.path.join(CORPUS, name + ".tif")
         write_tiff(path, pages, **opts)
@@ -827,6 +866,20 @@ def main():
         elif kind == "model":
             record(name, expected_for(name, pages), page["bits"] <= 8)
             record_pages(name, pages)
+        elif kind == "webp":
+            chunks = []
+            for i, (stream, x, y, cw, ch) in enumerate(raw_chunks(path)):
+                file = f"webp/{name}.{i}.webp"
+                with open(os.path.join(CORPUS, file), "wb") as f:
+                    f.write(stream)
+                chunks.append([file, x, y, cw, ch])
+            with Image.open(path) as im:
+                Image.fromarray(np.asarray(im.convert("RGBA"))).save(os.path.join(CORPUS, f"webp/{name}.pillow.png"))
+            webp_index[f"{name}.tif"] = dict(width=int(smp.shape[1]), height=int(smp.shape[0]), chunks=chunks,
+                                             pillow=f"webp/{name}.pillow.png", lossless=bool(page.get("webp_lossless")))
+            if page.get("webp_lossless"):
+                # Lossless strips are the source samples: Pillow must give them back exactly.
+                assert np.array_equal(pillow_rgba(path)[..., :smp.shape[2]], smp), name
         else:
             chunks = []
             for i, (stream, x, y, cw, ch) in enumerate(jpeg_chunks(path)):
@@ -882,11 +935,15 @@ def main():
         json.dump(dict(sorted(jpeg_index.items())), f, indent=1)
         f.write("\n")
 
+    with open(os.path.join(ROOT, "webp.json"), "w") as f:
+        json.dump(dict(sorted(webp_index.items())), f, indent=1)
+        f.write("\n")
+
     with open(os.path.join(ROOT, "reference.json"), "w") as f:
         json.dump(dict(sorted(reference.items())), f, indent=1)
         f.write("\n")
     oracles = {o: sum(v["oracle"] == o for v in reference.values()) for o in ("pillow", "libtiff", "model")}
-    print(f"{len(reference)} files ({oracles}), {len(jpeg_index)} JPEG files")
+    print(f"{len(reference)} files ({oracles}), {len(jpeg_index)} JPEG files, {len(webp_index)} WebP files")
 
 
 if __name__ == "__main__":

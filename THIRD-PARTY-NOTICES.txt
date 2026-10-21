@@ -4,7 +4,8 @@ PictureSharp.Tiff third-party notices
 PictureSharp.Tiff is licensed under the MIT License (see LICENSE).
 
 The IFD reader follows the TIFF 6.0 and BigTIFF specifications. Deflate uses System.IO.Compression from the .NET
-runtime; JPEG strips are decoded by the PictureSharp JPEG codec through its public API.
+runtime; JPEG and WebP strips are encoded and decoded by the PictureSharp JPEG and WebP codecs through their public
+API.
 
 -------------------------------------------------------------------------------
 LibTIFF (http://www.simplesystems.org/libtiff/), version 4.5.1
@@ -21,7 +22,8 @@ the t4.h run code tables); YCbCr to RGB (tif_color.c
 TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); packed
 YCbCr strip sizes (tif_strip.c TIFFVStripSize64); the BigTIFF header check (tif_open.c). The Deflate output limit
 follows tif_zip.c ZIPDecode, the JPEG table handling tif_jpeg.c JPEGPreDecode and the JPEG output tags tif_jpeg.c
-JPEGSetupEncode; the EXIF and GPS IFDs are written as tif_dir.c TIFFCreateEXIFDirectory and
+JPEGSetupEncode, the WebP strip layout and limits tif_webp.c (TWebPSetupDecode, TWebPPreDecode, TWebPDecode,
+TWebPSetupEncode, TWebPPostEncode); the EXIF and GPS IFDs are written as tif_dir.c TIFFCreateEXIFDirectory and
 TIFFWriteCustomDirectory do, and metadata edits append the directory as tif_dirwrite.c TIFFRewriteDirectory does. The
 code was translated to C#; it
 is not the original source.

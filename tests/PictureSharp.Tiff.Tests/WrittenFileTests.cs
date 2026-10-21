@@ -10,7 +10,7 @@ namespace PictureSharp.Formats.Tiff.Tests;
 /// Byte-exact snapshots of encoder output in <c>tests/assets/written</c>, which <c>verify_written.py</c> checks with
 /// libtiff 4.5.1 and Pillow 10.2.0. A mismatch writes the new files to <c>written.received</c> in the output directory:
 /// verify them with the script, then copy them over the snapshots. Deflate files are snapshotted for the script but not
-/// compared, since their bytes depend on the runtime's zlib. JPEG files come with our decode as a PNG
+/// compared, since their bytes depend on the runtime's zlib. JPEG and lossy WebP files come with our decode as a PNG
 /// (<c>name.decoded.png</c>), since libjpeg decodes them slightly differently.
 /// </summary>
 public sealed class WrittenFileTests
@@ -100,6 +100,16 @@ public sealed class WrittenFileTests
             image.Metadata.Exif = ExifSample.Block(bigEndian: false, orientation: 8);
             return image;
         }, EncoderSupport.Options(), TiffColorType.Grayscale);
+        yield return ("webp_rgb_lossless_33x17_rows5", () => EncoderSupport.Pattern(33, 17), EncoderSupport.Options(rowsPerStrip: 5, compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgb);
+        yield return ("webp_rgba_lossless_40x30", () =>
+        {
+            Image image = EncoderSupport.Pattern(40, 30, alpha: true);
+            image.GetPixelSpan()[..40].Fill(new Rgba32(200, 100, 50, 0));
+            return image;
+        }, EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgba);
+        yield return ("webp_gray_lossless_16x8", () => EncoderSupport.Pattern(16, 8, gray: true), EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgb);
+        yield return ("webp_rgb_lossy_96x64", () => EncoderSupport.Pattern(96, 64), EncoderSupport.Options(compression: TiffCompression.WebP), TiffColorType.Rgb);
+        yield return ("webp_rgba_lossy_70x41_q90_rows16", () => EncoderSupport.Pattern(70, 41, alpha: true), EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.WebP) with { WebPQuality = 90 }, TiffColorType.Rgba);
         yield return ("gray_7x3_deflate_level0", () => EncoderSupport.Pattern(7, 3, gray: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { DeflateLevel = 0 }, TiffColorType.Grayscale);
     }
 
@@ -114,16 +124,21 @@ public sealed class WrittenFileTests
             using Image source = create();
             byte[] file = source.ToTiff(options);
             using Image image = TestSupport.Load(file);
+            bool lossy = Lossy(options);
             if (options.Compression == TiffCompression.Jpeg)
             {
                 await Assert.That(EncoderSupport.JpegStripsMatch(file, image, decoded == TiffColorType.Grayscale ? 1 : 3)).IsTrue();
+            }
+            else if (lossy)
+            {
+                await Assert.That(EncoderSupport.StripsMatch(file, image)).IsTrue();
             }
             else
             {
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
             }
 
-            manifest[name + ".tif"] = Entry(image, options.Compression == TiffCompression.Jpeg ? Decoded(image, Received, name) : null,
+            manifest[name + ".tif"] = Entry(image, lossy ? Decoded(image, Received, name) : null,
                 MetadataWriteTests.ExifReference(source.Metadata.Exif, Received, name));
 
             string snapshot = Path.Combine(Snapshots, name + ".tif");
@@ -144,8 +159,8 @@ public sealed class WrittenFileTests
     }
 
     /// <summary>
-    /// Every corpus image written with each lossless compression must read back as the same pixels, and with CCITT
-    /// Group 4 as its black-and-white threshold. The files go to <c>written.corpus</c> in the output directory, where
+    /// Every corpus image written with each lossless compression (WebP lossless included) must read back as the same
+    /// pixels, and with CCITT Group 4 as its black-and-white threshold. The files go to <c>written.corpus</c> in the output directory, where
     /// <c>verify_written.py</c> checks them against libtiff and Pillow and compares the LZW, PackBits and Group 4 strips
     /// with libtiff's on the same samples.
     /// </summary>
@@ -157,9 +172,10 @@ public sealed class WrittenFileTests
         foreach (string name in TestSupport.Files())
         {
             using Image source = TestSupport.Load(TestSupport.ReadCorpus(name));
-            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate, TiffCompression.CcittGroup4, TiffCompression.Jpeg })
+            foreach (TiffCompression compression in new[] { TiffCompression.PackBits, TiffCompression.Lzw, TiffCompression.Deflate, TiffCompression.CcittGroup4, TiffCompression.Jpeg, TiffCompression.WebP })
             {
-                byte[] file = source.ToTiff(EncoderSupport.Options(compression: compression));
+                // WebP lossless, so the pixels must come back exactly.
+                byte[] file = source.ToTiff(EncoderSupport.Options(compression: compression) with { WebPLossless = true });
                 using Image image = TestSupport.Load(file);
                 if (compression == TiffCompression.Jpeg)
                 {
@@ -186,6 +202,9 @@ public sealed class WrittenFileTests
         manifest[stem + ".tif"] = Entry(image, compression == TiffCompression.Jpeg ? Decoded(image, CorpusOutput, stem) : null,
             MetadataWriteTests.ExifReference(source.Metadata.Exif, CorpusOutput, stem));
     }
+
+    private static bool Lossy(TiffEncoderOptions options) =>
+        options.Compression == TiffCompression.Jpeg || (options.Compression == TiffCompression.WebP && !options.WebPLossless);
 
     /// <summary>
     /// Our decode of a lossy file as a PNG next to it, which the script compares with Pillow and libtiff within the

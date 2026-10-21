@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.4 (writer, compressions,
-EXIF and metadata editing) done locally. Next: 0.4.5 WebP compression; writing is released as 0.5.0.**
+**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.5 (writer, compressions,
+EXIF and metadata editing, WebP) done locally. Next: 0.5.0 multi-page, tiles, BigTIFF and the release with writing.**
 
 ## Versions
 
@@ -20,7 +20,7 @@ EXIF and metadata editing) done locally. Next: 0.4.5 WebP compression; writing i
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Done, local |
-| 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Planned, local |
+| 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Done, local |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
@@ -245,6 +245,26 @@ User decision (2026-10-21): add WebP like JPEG, through the core codec instead o
   codec configured) decodes like the core WebP decode of each chunk and close to Pillow; our lossless
   output round-trips exactly and is read by libtiff and Pillow without warnings; lossy output within a PSNR bound set
   before implementation.
+
+Done 2026-10-21. Decisions and deviations:
+- `WEBP_LEVEL` (65568) and `WEBP_LOSSLESS` (65569) are libtiff pseudo-tags (codec settings above 65535), never written
+  to the file; the file holds only Compression 50001, so the plan's tag note above was wrong and nothing extra is written.
+- Reading (`TiffWebP`): each chunk is decoded with `DecodeEmbeddedPart` at the chunk size (a strip's own rows, a tile's
+  full size, as `TWebPPreDecode`), its RGB or RGBA values become the chunk's 8-bit samples (alpha dropped for three
+  samples, 255 for four when the stream has none) and the usual photometric and `ExtraSamples` rules convert them. A
+  stream smaller than its chunk, sample counts other than 3 or 4, other bit depths or formats, planar data and chunks
+  over 16383 throw `ImageFormatException` (libtiff errors); photometric other than RGB throws `NotSupportedException`.
+- Writing: options `WebPQuality` (1–100, default 75 as libtiff; the effort for lossless, where libtiff forces 100) and
+  `WebPLossless`; lossless sets the core encoder's `Exact`, so the colour of fully transparent pixels survives (libtiff
+  leaves libwebp's default). Strips carry no metadata chunks (`Metadata = None`); lossy RGBA uses VP8X + ALPH, which
+  libtiff reads. `RowsPerStrip` is capped at 16383; widths above 16383 throw `NotSupportedException`.
+- Verified first: the core lossless encoder keeps alpha and the colour under alpha 0 with `Exact`, and lossy alpha is
+  lossless (`AlphaQuality` 100).
+- Measured: 4 libtiff-written files (lossy and lossless, RGB and RGBA, strips and tiles, big-endian) decode equal to the
+  core decode of each chunk and bit-identical to Pillow (the core decoder matches libwebp, lossy included); lossy
+  strips are byte-identical to the core WebP of the strip; PSNR bound 30 dB at quality 75 met. 51/51 snapshots
+  (5 new WebP), 546/546 corpus files (91 re-encoded as lossless WebP, exact through libtiff and Pillow). JPEG and WebP
+  corpus files added to the mutation and truncation tests. 1423 tests.
 
 ### 0.5.0 — multi-page, tiles, BigTIFF; release
 
