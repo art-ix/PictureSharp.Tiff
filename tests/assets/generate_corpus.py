@@ -6,8 +6,9 @@ every layout tiffcp would (strips, tiles, separate planes, predictor 2, every co
 orders, reduced-resolution pages). Two small writers below cover what libtiff cannot write: old-style LSB-first LZW
 and an IFD without StripByteCounts.
 
-Expected pixels come from the source arrays and the decoder's documented rules: n-bit samples become
-v * 255 // max, 16-bit ones (v + 128) // 257, WhiteIsZero is inverted, premultiplied colour is divided by alpha at
+Expected pixels come from the source arrays and the decoder's documented rules: b-bit samples become
+round(v * 255 / (2^b - 1)) (exact for 1, 2, 4 and 8 bits, (v + 128) // 257 for 16), signed samples are first offset by
+2^(b - 1), WhiteIsZero is inverted, premultiplied colour is divided by alpha at
 the source depth (min(max, v * max // a), 0 where a is 0) and colour maps are (v + 128) // 257. Wherever Pillow
 10.2.0 decodes a file to 8-bit RGBA without its own rounding, its pixels must match exactly (oracle "pillow");
 the others are checked against the model only (oracle "model").
@@ -82,22 +83,23 @@ def alpha(w, h, depth=8):
 
 def premultiply(color, a, depth):
     top = (1 << depth) - 1
-    return ((color.astype(np.int64) * a[..., None] + top // 2) // top).astype(color.dtype)
+    dtype = object if depth > 16 else np.int64
+    return ((color.astype(dtype) * a.astype(dtype)[..., None] + top // 2) // top).astype(color.dtype)
 
 
 # --------------------------------------------------------------------------- expected pixels (the decoder's rules)
 
 def to8(v, bits):
-    v = v.astype(np.int64)
-    if bits == 16:
-        return ((v + 128) // 257).astype(np.uint8)
-    return (v * 255 // ((1 << bits) - 1)).astype(np.uint8)
+    top = (1 << bits) - 1
+    v = v.astype(object if bits > 16 else np.int64)
+    return ((v * 510 + top) // (2 * top)).astype(np.uint8)
 
 
 def unpremultiply(color, a, bits):
     top = (1 << bits) - 1
-    c = color.astype(np.int64)
-    a = a.astype(np.int64)[..., None]
+    dtype = object if bits > 16 else np.int64
+    c = color.astype(dtype)
+    a = a.astype(dtype)[..., None]
     out = np.where(a == top, c, np.minimum(top, c * top // np.maximum(a, 1)))
     return np.where(a == 0, 0, out)
 
@@ -112,11 +114,12 @@ def expected(samples, bits, photometric, extra=None, colormap=None):
         idx = samples[..., 0].astype(np.int64)
         rgb = np.stack([cmap[0][idx], cmap[1][idx], cmap[2][idx]], -1).astype(np.uint8)
         return np.dstack([rgb, np.full((h, w), 255, np.uint8)])
-    color = samples[..., :color_count].astype(np.int64)
+    dtype = object if bits > 16 else np.int64
+    color = samples[..., :color_count].astype(dtype)
     if photometric == "miniswhite":
         color = top - color
     if extra in ("straight", "assoc"):
-        a = samples[..., color_count].astype(np.int64)
+        a = samples[..., color_count].astype(dtype)
         if extra == "assoc":
             color = unpremultiply(color, a, bits)
         a8 = to8(a, bits)
@@ -134,12 +137,10 @@ def pack_rows(samples, bits):
     """Packs (rows, w, spp) samples into rows padded to whole bytes, MSB first, native 16-bit order."""
     rows, w, spp = samples.shape
     flat = samples.reshape(rows, w * spp)
-    if bits == 8:
-        return flat.astype(np.uint8).tobytes()
-    if bits == 16:
-        return flat.astype("=u2").tobytes()
-    if bits == 32:
-        return flat.astype("=f4").tobytes()
+    if bits in (8, 16, 32, 64):
+        # The sample's own type: unsigned, signed (int8 ... int32) or IEEE (float16 ... float64), in native order.
+        kind = flat.dtype.kind if flat.dtype.kind in "uif" else "u"
+        return flat.astype(f"={kind}{bits // 8}").tobytes()
     out = bytearray()
     for r in range(rows):
         bitstr = 0
@@ -467,6 +468,9 @@ def expected_for(name, pages):
 
 
 def page_expected(page):
+    if page.get("sample_format") == 2:
+        # Signed samples: offset by half the range, then the unsigned rules of the same depth.
+        page = dict(page, samples=page["samples"].astype(object) + (1 << (page["bits"] - 1)), sample_format=1)
     extra = page.get("extra")
     mode = None
     if extra is None and page["samples"].shape[2] == (3 if page["photometric"] == "rgb" else 1) + 1:
@@ -607,24 +611,80 @@ def jpeg_chunks(path):
         lib.TIFFClose(tif)
 
 
-def float_to8(v):
-    v = v.astype(np.float32)
-    scaled = np.floor(np.clip(v, 0, 1) * np.float32(255) + np.float32(0.5))
+lib.TIFFReadEncodedStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_ssize_t]
+lib.TIFFReadEncodedStrip.restype = ctypes.c_ssize_t
+lib.TIFFReadEncodedTile.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_ssize_t]
+lib.TIFFReadEncodedTile.restype = ctypes.c_ssize_t
+lib.TIFFStripSize.argtypes = [ctypes.c_void_p]
+lib.TIFFStripSize.restype = ctypes.c_ssize_t
+lib.TIFFTileSize.argtypes = [ctypes.c_void_p]
+lib.TIFFTileSize.restype = ctypes.c_ssize_t
+
+
+def libtiff_bytes(path):
+    """Every strip or tile as libtiff decodes it (TIFFReadEncodedStrip/Tile), joined, in host byte order."""
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    try:
+        tiled = lib.TIFFIsTiled(tif)
+        n = lib.TIFFNumberOfTiles(tif) if tiled else lib.TIFFNumberOfStrips(tif)
+        size = lib.TIFFTileSize(tif) if tiled else lib.TIFFStripSize(tif)
+        read = lib.TIFFReadEncodedTile if tiled else lib.TIFFReadEncodedStrip
+        out = bytearray()
+        for i in range(n):
+            buf = ctypes.create_string_buffer(size)
+            got = read(tif, i, buf, size)
+            if got < 0:
+                raise RuntimeError(f"{path}: chunk {i} failed")
+            out += buf.raw[:got]
+        return bytes(out)
+    finally:
+        lib.TIFFClose(tif)
+
+
+def source_bytes(page):
+    """The chunks write_directory hands to libtiff, in the same order, for comparison with libtiff_bytes."""
+    samples, bits = page["samples"], page["bits"]
+    h, w, spp = samples.shape
+    planes = [samples[..., p:p + 1] for p in range(spp)] if page.get("separate") else [samples]
+    out = bytearray()
+    for plane in planes:
+        if page.get("tile"):
+            tw, tl = page["tile"]
+            across, down = -(-w // tw), -(-h // tl)
+            padded = np.zeros((down * tl, across * tw, plane.shape[2]), plane.dtype)
+            padded[:h, :w] = plane
+            for ty in range(down):
+                for tx in range(across):
+                    out += pack_rows(padded[ty * tl:(ty + 1) * tl, tx * tw:(tx + 1) * tw], bits)
+        else:
+            rps = page.get("rows_per_strip") or h
+            for y in range(0, h, rps):
+                out += pack_rows(plane[y:y + rps], bits)
+    return bytes(out)
+
+
+def float_to8(v, t=np.float32):
+    v = v.astype(t)
+    scaled = np.floor(np.clip(v, 0, 1) * t(255) + t(0.5))
     return np.where(~(v > 0), 0, np.where(v >= 1, 255, scaled)).astype(np.uint8)
 
 
 def float_expected(samples, photometric, assoc=False):
+    """16- and 32-bit samples in single precision (a half converts exactly), 64-bit ones in double precision."""
     h, w, spp = samples.shape
+    t = np.float64 if samples.dtype == np.float64 else np.float32
     color = 3 if photometric == "rgb" else 1
-    c = samples[..., :color].astype(np.float32)
-    a = samples[..., color].astype(np.float32) if spp > color else np.ones((h, w), np.float32)
+    c = samples[..., :color].astype(t)
+    a = samples[..., color].astype(t) if spp > color else np.ones((h, w), t)
+    if photometric == "miniswhite":
+        c = (t(1) - c).astype(t)
     if assoc:
-        div = np.where(a > 0, a, np.float32(1))[..., None]
-        c = np.where(a[..., None] == 1, c, np.where(a[..., None] > 0, (c / div).astype(np.float32), np.float32(0)))
-    c8 = float_to8(c)
+        div = np.where(a > 0, a, t(1))[..., None]
+        c = np.where(a[..., None] == 1, c, np.where(a[..., None] > 0, (c / div).astype(t), t(0)))
+    c8 = float_to8(c, t)
     if color == 1:
         c8 = np.repeat(c8, 3, -1)
-    return np.dstack([c8, float_to8(a)])
+    return np.dstack([c8, float_to8(a, t)])
 
 
 def cmyk_expected(samples, bits):
@@ -765,6 +825,74 @@ def cases_030():
         dict(samples=rgb[::4, ::4].copy(), bits=8, photometric="rgb", subfile=1),
     ], dict(big_tiff=True, big_endian=True), "model"
 
+    yield from cases_053(w, h, rgb, gray, s)
+
+
+def cases_053(w, h, rgb, gray, s):
+    """0.5.3 sample formats and depths: unsigned 3 to 14 and 32 bits, signed 8, 16 and 32 bits, IEEE 16 and 64 bits."""
+    rng = np.random.default_rng(53)
+
+    def deep(bits, channels=3):
+        # The 8-bit photo widened to the depth, with noise in the low bits so that the rounding matters.
+        top = (1 << bits) - 1
+        src = rgb if channels == 3 else gray[..., None]
+        v = src.astype(np.float64) / 255 * top + rng.uniform(-0.49, 0.49, src.shape) * max(1, top / 255)
+        return np.clip(np.rint(v), 0, top).astype(np.uint32 if bits > 16 else np.uint16)
+
+    def deep_alpha(bits):
+        top = (1 << bits) - 1
+        a = alpha(w, h).astype(np.float64) / 255 * top
+        return np.rint(a).astype(np.uint32 if bits > 16 else np.uint16)
+
+    for bits in (3, 5, 10, 12, 14):
+        yield f"gray{bits}_none", [dict(samples=deep(bits, 1), bits=bits, photometric="minisblack")], {}, "depth"
+    yield "gray12_lzw_tiles", [dict(samples=deep(12, 1), bits=12, photometric="minisblack", compression="lzw", tile=(16, 16))], {}, "depth"
+    yield "gray10_deflate_be", [dict(samples=deep(10, 1), bits=10, photometric="minisblack", compression="deflate", rows_per_strip=5)], dict(big_endian=True), "depth"
+    yield "gray12_miniswhite_packbits", [dict(samples=deep(12, 1), bits=12, photometric="miniswhite", compression="packbits", rows_per_strip=7)], {}, "depth"
+    yield "rgb6_separate", [dict(samples=deep(6), bits=6, photometric="rgb", separate=True, rows_per_strip=9)], {}, "depth"
+    yield "rgb10_none", [dict(samples=deep(10), bits=10, photometric="rgb")], {}, "depth"
+    yield "rgb12_lzw_be", [dict(samples=deep(12), bits=12, photometric="rgb", compression="lzw", rows_per_strip=6)], dict(big_endian=True), "depth"
+    yield "rgb14_deflate_tiles", [dict(samples=deep(14), bits=14, photometric="rgb", compression="deflate", tile=(16, 16))], {}, "depth"
+    c12, a12 = deep(12), deep_alpha(12)
+    yield "rgba12_assoc", [dict(samples=np.dstack([premultiply(c12, a12, 12), a12]), bits=12, photometric="rgb", extra=[1])], {}, "depth"
+    yield "graya12_straight_separate", [dict(samples=np.dstack([deep(12, 1), a12]), bits=12, photometric="minisblack", extra=[2], separate=True)], {}, "depth"
+
+    yield "gray32u_none", [dict(samples=deep(32, 1), bits=32, photometric="minisblack")], {}, "depth"
+    yield "gray32u_lzw_predictor", [dict(samples=deep(32, 1), bits=32, photometric="minisblack", compression="lzw", predictor=2, rows_per_strip=8)], {}, "depth"
+    yield "rgb32u_deflate_predictor_be", [dict(samples=deep(32), bits=32, photometric="rgb", compression="deflate", predictor=2)], dict(big_endian=True), "depth"
+    c32, a32 = deep(32), deep_alpha(32)
+    yield "rgba32u_assoc_separate", [dict(samples=np.dstack([premultiply(c32, a32, 32), a32]),
+                                          bits=32, photometric="rgb", extra=[1], separate=True)], {}, "depth"
+
+    def signed(bits, channels=3):
+        u = deep(bits, channels).astype(np.int64) - (1 << (bits - 1))
+        return u.astype({8: np.int8, 16: np.int16, 32: np.int32}[bits])
+
+    yield "int8_gray_none", [dict(samples=signed(8, 1), bits=8, photometric="minisblack", sample_format=2)], {}, "depth"
+    yield "int8_rgb_lzw_predictor", [dict(samples=signed(8), bits=8, photometric="rgb", sample_format=2, compression="lzw", predictor=2, rows_per_strip=4)], {}, "depth"
+    yield "int16_gray_deflate_predictor_be", [dict(samples=signed(16, 1), bits=16, photometric="minisblack", sample_format=2, compression="deflate", predictor=2)], dict(big_endian=True), "depth"
+    yield "int16_rgba_straight_separate", [dict(samples=np.dstack([signed(16), (deep_alpha(16).astype(np.int64) - 32768).astype(np.int16)]),
+                                                bits=16, photometric="rgb", sample_format=2, extra=[2], separate=True)], {}, "depth"
+    yield "int32_gray_none_be", [dict(samples=signed(32, 1), bits=32, photometric="minisblack", sample_format=2)], dict(big_endian=True), "depth"
+    yield "int32_rgb_lzw_predictor_tiles", [dict(samples=signed(32), bits=32, photometric="rgb", sample_format=2, compression="lzw", predictor=2, tile=(16, 16))], {}, "depth"
+
+    f = (rgb.astype(np.float64) / 255 * 1.2 - 0.1)
+    f[0, 0] = np.nan
+    f[0, 1] = np.inf
+    fa = np.clip(alpha(w, h).astype(np.float64) / 255, 0, 1)
+    fgray = (gray.astype(np.float64) / 255)[..., None]
+    for t, bits in ((np.float16, 16), (np.float64, 64)):
+        name = f"float{bits}"
+        ft, fat, fg = f.astype(t), fa.astype(t), fgray.astype(t)
+        yield f"{name}_gray_none", [dict(samples=fg, bits=bits, photometric="minisblack", sample_format=3)], {}, "float"
+        yield f"{name}_rgb_lzw_predictor3", [dict(samples=ft, bits=bits, photometric="rgb", sample_format=3, compression="lzw", predictor=3, rows_per_strip=8)], {}, "float"
+        yield f"{name}_gray_deflate_predictor3_tiles", [dict(samples=fg, bits=bits, photometric="minisblack", sample_format=3, compression="deflate", predictor=3, tile=(16, 16))], {}, "float"
+        yield f"{name}_rgb_be", [dict(samples=ft, bits=bits, photometric="rgb", sample_format=3, rows_per_strip=5)], dict(big_endian=True), "float"
+        pre = np.dstack([(np.clip(ft, 0, 1) * fat[..., None]).astype(t), fat]).astype(t)
+        yield f"{name}_rgba_assoc", [dict(samples=pre, bits=bits, photometric="rgb", sample_format=3, extra=[1], compression="lzw", predictor=3)], {}, "float-assoc"
+    yield "float16_miniswhite_separate", [dict(samples=np.dstack([fgray.astype(np.float16), fa.astype(np.float16)[..., None]]), bits=16,
+                                               photometric="miniswhite", sample_format=3, extra=[2], separate=True)], {}, "float"
+
 
 def imagemagick_cases(src_png):
     """Files written by ImageMagick 6 `convert` from the same source (DoD: CMYK, float, BigTIFF)."""
@@ -854,7 +982,7 @@ def main():
             record(name, cmyk_expected(smp, page["bits"]), page["bits"] == 8 and smp.shape[2] == 4)
         elif kind in ("float", "float-assoc"):
             want = float_expected(smp, page["photometric"], assoc=kind == "float-assoc")
-            if smp.shape[2] == 1:
+            if smp.shape[2] == 1 and smp.dtype == np.float32:
                 # Pillow reads single-sample float images; the rule applied to its values must give the same.
                 with Image.open(path) as im:
                     assert np.array_equal(float_to8(np.asarray(im)), want[..., 0]), name
@@ -866,6 +994,10 @@ def main():
         elif kind == "model":
             record(name, expected_for(name, pages), page["bits"] <= 8)
             record_pages(name, pages)
+        elif kind == "depth":
+            # libtiff must read back the samples as written (predictor and compression undone); pixels from the model.
+            assert libtiff_bytes(path) == source_bytes(page), name
+            record(name, expected_for(name, pages), False)
         elif kind == "webp":
             chunks = []
             for i, (stream, x, y, cw, ch) in enumerate(raw_chunks(path)):

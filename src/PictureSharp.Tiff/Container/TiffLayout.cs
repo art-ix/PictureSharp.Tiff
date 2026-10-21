@@ -26,6 +26,7 @@ internal sealed class TiffLayout
     public const int CompressionWebP = 50001;
 
     public const int FormatUnsigned = 1;
+    public const int FormatSigned = 2;
     public const int FormatFloat = 3;
 
     // Larger sample counts would multiply the planar buffers; no supported colour model needs them.
@@ -215,7 +216,8 @@ internal sealed class TiffLayout
         bool predictorFits = EffectivePredictor switch
         {
             1 => true,
-            2 => SampleFormat == FormatUnsigned && BitsPerSample is 8 or 16 && !IsSubsampledYCbCr,
+            // port: libtiff/tif_predict.c PredictorSetupDecode: horAcc8, horAcc16 and horAcc32 for integer samples.
+            2 => SampleFormat is FormatUnsigned or FormatSigned && BitsPerSample is 8 or 16 or 32 && !IsSubsampledYCbCr,
             3 => SampleFormat == FormatFloat,
             _ => false,
         };
@@ -294,9 +296,19 @@ internal sealed class TiffLayout
     {
         if (SampleFormat == FormatFloat)
         {
-            if (BitsPerSample != 32 || Photometric is not (WhiteIsZero or BlackIsZero or Rgb))
+            if (BitsPerSample is not (16 or 32 or 64) || Photometric is not (WhiteIsZero or BlackIsZero or Rgb))
             {
-                throw new NotSupportedException($"{BitsPerSample}-bit floating-point TIFF samples are only supported as 32-bit greyscale or RGB.");
+                throw new NotSupportedException($"{BitsPerSample}-bit floating-point TIFF samples are only supported as 16-, 32- or 64-bit greyscale or RGB.");
+            }
+
+            return;
+        }
+
+        if (SampleFormat == FormatSigned)
+        {
+            if (BitsPerSample is not (8 or 16 or 32) || Photometric is not (WhiteIsZero or BlackIsZero or Rgb))
+            {
+                throw new NotSupportedException($"{BitsPerSample}-bit signed TIFF samples are only supported as 8-, 16- or 32-bit greyscale or RGB.");
             }
 
             return;
@@ -304,13 +316,13 @@ internal sealed class TiffLayout
 
         if (SampleFormat != FormatUnsigned)
         {
-            throw new NotSupportedException($"The TIFF sample format {SampleFormat} (signed or complex samples) is not supported.");
+            throw new NotSupportedException($"The TIFF sample format {SampleFormat} (complex or undefined samples) is not supported.");
         }
 
         bool supportedBits = Photometric switch
         {
-            WhiteIsZero or BlackIsZero => BitsPerSample is 1 or 2 or 4 or 8 or 16,
-            Rgb or Separated => BitsPerSample is 8 or 16,
+            WhiteIsZero or BlackIsZero or Rgb => BitsPerSample is <= 16 or 32,
+            Separated => BitsPerSample is 8 or 16,
             Palette => BitsPerSample is 1 or 2 or 4 or 8,
             YCbCr => BitsPerSample == 8,
             _ => throw new NotSupportedException($"The TIFF photometric interpretation {Photometric} is not supported."),

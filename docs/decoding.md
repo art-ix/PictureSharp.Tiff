@@ -38,17 +38,17 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | --- | --- |
 | Container | classic TIFF and BigTIFF, little- and big-endian; strips or tiles; contiguous or planar samples |
 | Compression | none, PackBits, LZW (also the old LSB-first variant), Deflate (8 and 32946), JPEG (7), WebP (50001), CCITT RLE, RLEW, Group 3 (1D and 2D) and Group 4; `FillOrder` 2 |
-| Predictor | horizontal (2) and floating point (3), with LZW and Deflate |
-| Greyscale | 1, 2, 4, 8 and 16 bits, black or white is zero |
+| Predictor | horizontal (2) for 8-, 16- and 32-bit integers and floating point (3), with LZW and Deflate |
+| Greyscale, RGB | unsigned 1 to 16 and 32 bits; signed 8, 16 and 32 bits; black or white is zero for greyscale |
 | Palette | 1, 2, 4 and 8 bits |
-| RGB, CMYK | 8 and 16 bits |
+| CMYK | 8 and 16 bits |
 | YCbCr | 8 bits, with subsampling (port of libtiff `tif_color.c`) |
-| Floating point | 32-bit greyscale and RGB |
+| Floating point | 16-bit (half), 32-bit and 64-bit greyscale and RGB |
 | Alpha | `ExtraSamples` associated (unpremultiplied) or unassociated, following Pillow's rules |
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
-LogLuv, CIE Lab, transparency masks, signed samples, floating point other than 32 bits, JPEG other than contiguous 8-bit
-greyscale, RGB or YCbCr (so no alpha), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
+LogLuv, CIE Lab, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
+contiguous 8-bit greyscale, RGB or YCbCr (so no alpha), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
 other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
 
@@ -56,8 +56,14 @@ other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`).
 
 `Image` holds 8-bit straight-alpha RGBA, so deeper samples are reduced:
 
-- 16-bit samples and 16-bit colour map entries: `round(v / 257)`.
-- 32-bit floating point: clamped to [0, 1], then `(int)(v * 255 + 0.5)`.
+- Unsigned b-bit samples: `round(v * 255 / (2^b - 1))`. This is exact for 1, 2, 4 and 8 bits, `round(v / 257)` for
+  16 bits and `round(v / 16843009)` for 32 bits; no ties occur. Depths other than 8, 16 and 32 are packed MSB first.
+- Signed samples (`SampleFormat` 2) are offset by `2^(b - 1)` and then reduced as unsigned samples of the same depth,
+  so the whole range maps linearly: the minimum to 0, zero to 128 (for 8 bits) and the maximum to 255. Negative values
+  are not clamped to 0. libtiff's `TIFFReadRGBAImage` reinterprets the bits as unsigned instead.
+- 16-bit colour map entries: `round(v / 257)`.
+- Floating point: clamped to [0, 1], then `(int)(v * 255 + 0.5)`; NaN becomes 0. 16- and 32-bit samples are computed
+  in single precision (a half converts to a float exactly), 64-bit samples in double precision.
 - Associated alpha is unpremultiplied at the source depth, before the reduction.
 - CMYK is converted as Pillow converts it (no colour management); an ICC profile is kept in the metadata.
 

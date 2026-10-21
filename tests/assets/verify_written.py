@@ -497,7 +497,7 @@ def main():
     for name, entry in sorted(manifest.items()):
         path = os.path.join(root, name)
         errors = verify(path, entry)
-        if "pages" in entry:
+        if isinstance(entry.get("pages"), list):  # edited files list only their page count
             checked["pages"] += 1 + len(entry["pages"])
             for page, sub in enumerate(entry["pages"], 1):
                 errors += [f"page {page}: {e}" for e in verify(path, sub, page)]

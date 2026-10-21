@@ -105,14 +105,32 @@ public sealed class TiffDecoderTests
     [Arguments((ushort)259, (uint)50000)]   // Zstandard
     [Arguments((ushort)262, (uint)8)]       // CIE L*a*b*
     [Arguments((ushort)262, (uint)4)]       // transparency mask
-    [Arguments((ushort)339, (uint)2)]       // signed samples
+    [Arguments((ushort)339, (uint)5)]       // complex integer samples
     [Arguments((ushort)339, (uint)3)]       // 8-bit floating-point samples
-    [Arguments((ushort)258, (uint)12)]      // 12-bit samples
+    [Arguments((ushort)258, (uint)24)]      // 24-bit samples
     public async Task UnsupportedFeatures_ThrowNotSupported_ButIdentify(ushort tag, uint value)
     {
         byte[] data = TiffBuilder.Gray(8, 4).Set(tag, TiffBuilder.Short, value).Build();
         await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
         await Assert.That(TestSupport.Identify(data).Width).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task SignedSamples_MapTheWholeRangeLinearly()
+    {
+        // Two's complement bytes: -128 becomes 0, -1 becomes 127, 0 becomes 128 and 127 becomes 255.
+        using Image image = TestSupport.Load(TiffBuilder.Gray(8, 4).Set(339, TiffBuilder.Short, 2).Build());
+        ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan();
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            byte stored = (byte)(i * 7);
+            if (pixels[i] != new Rgba32((byte)(stored ^ 0x80), (byte)(stored ^ 0x80), (byte)(stored ^ 0x80), 255))
+            {
+                throw new InvalidOperationException($"Pixel {i}: {pixels[i]}");
+            }
+        }
+
+        await Assert.That(pixels[0].R).IsEqualTo((byte)128);
     }
 
     [Test]

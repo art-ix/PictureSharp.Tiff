@@ -4,9 +4,10 @@ using PictureSharp.Formats.Tiff.Container;
 namespace PictureSharp.Formats.Tiff.Codecs;
 
 /// <summary>
-/// Turns rows of unpacked samples into straight-alpha <see cref="Rgba32"/>. Samples of 1, 2 and 4 bits scale to 8
-/// bits exactly (<c>v * 255 / max</c>); 16-bit samples become <c>round(v / 257)</c>, ties up. WhiteIsZero is
-/// inverted first, then premultiplied colour is divided by alpha at the source depth as Pillow's <c>unpackRGBa</c>
+/// Turns rows of unpacked samples into straight-alpha <see cref="Rgba32"/>. Samples of b bits become
+/// <c>round(v * 255 / (2^b - 1))</c>: exact for 1, 2, 4 and 8 bits, <c>round(v / 257)</c> for 16 and
+/// <c>round(v / 16843009)</c> for 32 (no ties occur). Signed samples arrive offset by <c>2^(b - 1)</c>, so their whole
+/// range maps linearly. WhiteIsZero is inverted first, then premultiplied colour is divided by alpha at the source depth as Pillow's <c>unpackRGBa</c>
 /// does (<c>min(max, v * max / a)</c>, 0 where alpha is 0). Colour map entries become <c>round(v / 257)</c>. CMYK
 /// converts after the 8-bit reduction as Pillow's <c>cmyk2rgb</c> does.
 /// </summary>
@@ -28,12 +29,12 @@ internal sealed class TiffColorConverter
         alpha = layout.AlphaSample;
         associated = layout.Associated;
         bits = layout.BitsPerSample;
-        max = (1 << bits) - 1;
+        max = bits < 32 ? (1 << bits) - 1 : 0;
         this.palette = palette;
-        scale = new byte[bits <= 8 ? max + 1 : 0];
+        scale = new byte[bits < 16 ? max + 1 : 0];
         for (int v = 0; v < scale.Length; v++)
         {
-            scale[v] = (byte)(v * 255 / max);
+            scale[v] = (byte)((v * 510 + max) / (2 * max));
         }
     }
 
@@ -158,7 +159,31 @@ internal sealed class TiffColorConverter
         }
     }
 
+    /// <summary>The same conversion for 32-bit integer samples (signed ones already offset), greyscale or RGB.</summary>
+    public void Convert(ReadOnlySpan<uint> row, Span<Rgba32> pixels)
+    {
+        bool invert = photometric == TiffLayout.WhiteIsZero;
+        for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+        {
+            ulong a = alpha >= 0 ? row[s + alpha] : uint.MaxValue;
+            if (photometric == TiffLayout.Rgb)
+            {
+                pixels[x] = new Rgba32(Color32(row[s], a), Color32(row[s + 1], a), Color32(row[s + 2], a), Reduce32(a));
+            }
+            else
+            {
+                byte g = Color32(invert ? uint.MaxValue - row[s] : row[s], a);
+                pixels[x] = new Rgba32(g, g, g, Reduce32(a));
+            }
+        }
+    }
+
     private static byte Reduce16(uint v) => (byte)((v + 128) / 257);
+
+    private static byte Reduce32(ulong v) => (byte)((2 * v + 16843009) / 33686018);
+
+    private byte Color32(ulong v, ulong a) =>
+        Reduce32(associated && a != uint.MaxValue ? a == 0 ? 0 : Math.Min(uint.MaxValue, v * uint.MaxValue / a) : v);
 
     // port: Pillow 10.2.0 Convert.c cmyk2rgb: nk - MULDIV255(ink, nk), where nk is 255 minus black.
     private static byte Ink(int ink, int nk)

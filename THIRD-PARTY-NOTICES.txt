@@ -12,7 +12,7 @@ LibTIFF (http://www.simplesystems.org/libtiff/), version 4.5.1
 Used for, in src/PictureSharp.Tiff/Codecs and Container: the PackBits decoder and encoder (tif_packbits.c
 PackBitsDecode, PackBitsEncode, PackBitsEncodeChunk); the LZW decoder including old-style LSB-first codes and the LZW
 encoder (tif_lzw.c LZWSetupDecode, LZWPreDecode, LZWDecode, LZWDecodeCompat, LZWPreEncode, LZWEncode, LZWPostEncode,
-PutNextCode); predictors 2 and 3 (tif_predict.c horAcc8, horAcc16, swabHorAcc16, fpAcc, PredictorDecodeTile; horDiff8,
+PutNextCode); predictors 2 and 3 (tif_predict.c horAcc8, horAcc16, horAcc32, swabHorAcc16, swabHorAcc32, fpAcc, PredictorDecodeTile; horDiff8,
 PredictorEncodeTile);
 fill order 2 (tif_swab.c TIFFReverseBits); the CCITT RLE, Group 3 and Group 4 decoders (tif_fax3.c Fax3PreDecode,
 Fax3SetupState, Fax3Decode1D, Fax3Decode2D, Fax4Decode, Fax3DecodeRLE, _TIFFFax3fillruns and the tif_fax3.h

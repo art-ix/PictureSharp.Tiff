@@ -6,7 +6,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.5.1 released 2026-10-21 (parallel reading, 8-bit fast paths, row bands). 0.5.2 released 2026-10-21
-(vectorized Auto analysis; the ordered pipeline is deferred). Next: 0.6.0 reading gaps, starting with 0.5.3.**
+(vectorized Auto analysis; the ordered pipeline is deferred). 0.5.3 implemented (uncommitted); next 0.5.4 CIELab.
+CMYK JPEG (0.5.5) waits for a core request.**
 
 ## Versions
 
@@ -24,7 +25,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
 | 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Released 2026-10-21 |
 | 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Released 2026-10-21 |
-| 0.5.3 | Reading: more sample formats and bit depths | Planned, released in 0.6.0 |
+| 0.5.3 | Reading: more sample formats and bit depths | Implemented, released in 0.6.0 |
 | 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Planned, released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Planned |
@@ -516,14 +517,34 @@ Ordered by how often the features appear in real files. Each milestone extends t
     libtiff `TIFFReadRGBAImage` reinterprets the bits as unsigned, which is no useful reference; Pillow keeps 32-bit
     integers. Oracle: samples from `TIFFReadEncodedStrip` plus the rule model.
   - `BitsPerSample` 32 for integer samples needs a wider sample row than `ushort`; keep the 8/16-bit path unchanged.
+  - Done 2026-10-21 (uncommitted):
+    - `TiffLayout`: unsigned grey and RGB at 1–16 and 32 bits, signed 8/16/32-bit grey and RGB, float 16/32/64-bit
+      grey and RGB; predictor 2 also for signed and 32-bit integers (`horAcc32`, `swabHorAcc32`), as libtiff
+      `PredictorSetupDecode`. Complex samples, 17–31 and 64-bit integers stay `NotSupportedException`.
+    - `IntegerChunkConverter`: a 24-bit window unpacks depths that cross bytes (3, 5, 6, 7, 9–15 bits, MSB first in
+      both byte orders); signed samples are offset by flipping the sign bit; 32-bit samples use a `uint` row and
+      `TiffColorConverter.Convert(ReadOnlySpan<uint>)` (`round(v / 16843009)`, premultiplied colour divided in 64-bit
+      arithmetic). The 8-bit fast path stays unsigned only. The scale table rounds (`(v·510 + max) / (2·max)`), which
+      is unchanged for 1, 2, 4 and 8 bits.
+    - `FloatChunkConverter`: halves convert to floats exactly and share the single-precision rule; 64-bit samples use
+      the same rule in double precision.
+    - Corpus: 35 libtiff-written files (`cases_053` in `generate_corpus.py`, oracle "model"; libtiff must read back
+      every chunk byte-identical to the source with `TIFFReadEncodedStrip`/`Tile`): 3- to 14-bit grey and RGB
+      (strips, tiles, planar, MinIsWhite, premultiplied 12-bit), 32-bit unsigned (predictor 2, both byte orders,
+      premultiplied planar), signed 8/16/32 (predictor 2, planar alpha, tiles), half and double (predictor 3, tiles,
+      big-endian, premultiplied, MinIsWhite planar). The 91 earlier files and their references are byte-identical.
+      `verify_written.py` counted pages of edited files wrongly (an `int`, not a list); fixed.
+    - Tests: 2639 pass (corpus, robustness, parallel, re-encoded corpus 882/882 through libtiff and Pillow, edited
+      corpus 126/126); `SignedSamples_MapTheWholeRangeLinearly`; the unsupported-feature cases now use complex and
+      24-bit samples. `docs/decoding.md` (support table, rounding), README.
 - **0.5.4 — CIELab (photometric 8):** 8- and 16-bit, port of `tif_getimage.c` `putcontig8bitCIELab8` /
   `putcontig8bitCIELab16` and `tif_color.c` `TIFFCIELabToRGBInit`, `TIFFCIELabToXYZ`, `TIFFXYZToRGB` with libtiff's
   `display_sRGB` and the file's white point. Oracle: libtiff `TIFFReadRGBAImage`, exact. ICCLab (9) and ITULab (10)
   stay unsupported (libtiff's RGBA path does not convert them).
 - **0.5.5 — JPEG variants:** planar JPEG (each plane a one-component JPEG, decoded through `DecodeEmbeddedPart` and
-  merged) and CMYK JPEG (photometric 5, four components, as Photoshop writes). To verify first: what the core JPEG
-  decoder returns for a 4-component stream without an Adobe marker (it may need the raw components; a core request if
-  so). JPEG with alpha stays unsupported, as in libtiff.
+  merged) and CMYK JPEG (photometric 5, four components, as Photoshop writes). Checked 2026-10-21: the core returns
+  Adobe-inverted CMYK as RGB, wrong for TIFF; CMYK JPEG waits for the core request (see "Core requests"), planar JPEG
+  can go ahead. JPEG with alpha stays unsupported, as in libtiff.
 - **Not planned:** LogLuv, PixarLog (HDR; no 8-bit-only use), transparency masks (photometric 4) as the main page,
   different `BitsPerSample` per sample, CMYK with other ink sets or premultiplied alpha, YCbCr deeper than 8 bits.
   They keep throwing `NotSupportedException`.
@@ -539,6 +560,11 @@ Ordered by how often the features appear in real files. Each milestone extends t
   switch for it (`color` in `JpegEncoder.EncodeImage`) is internal. Requested in the core `plan.md` as 0.7.9 (2026-10-21);
   JPEG output waits for that release, CCITT G4 and bilevel output go first. Closed in core 0.7.9
   (`JpegEncoderOptions.ColorMode`); used from 0.4.3.
+- CMYK JPEG (0.5.5): the core JPEG decoder takes four components as Adobe-inverted CMYK and returns RGB; TIFF stores
+  plain ink values (libtiff 4.5.1 writes CMYK JPEG strips without an Adobe marker). Checked 2026-10-21 on a libtiff
+  file: up to 255 off `TIFFReadRGBAImage` (mean 102), and not recoverable from the RGB result. Requested in the core
+  `plan.md` (2026-10-21): format options for `DecodeEmbeddedPart` and a `JpegDecoderOptions` CMYK storage setting
+  (plain or Adobe-inverted), optionally the part's degree of parallelism. Planar JPEG does not depend on it.
 - To check during 0.5.0: a frame-writer SPI for plugins (`Image.CreateFrameWriter` supports only GIF, APNG and WebP),
   which would allow writing multi-page TIFF page by page without holding every frame. Report to the core `plan.md` if
   needed.

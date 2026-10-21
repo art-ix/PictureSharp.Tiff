@@ -27,13 +27,12 @@ Other pages, JPEG compression and tiles are covered in the guides below.
 
 ## Support
 
-- **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP and CCITT fax; grey, palette, RGB, CMYK,
-  YCbCr and float, with or without alpha.
+- **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP and CCITT fax; grey, palette, RGB, CMYK
+  and YCbCr, with or without alpha; integer samples of 1 to 16 and 32 bits (also signed), float of 16, 32 and 64 bits.
 - **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha; the same compressions (CCITT
   Group 4 only).
 - **Metadata:** ICC, XMP, EXIF/GPS, orientation and resolution, also edited in place.
-- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, CIE Lab, signed samples; writing 16-bit, CMYK or planar
-  data.
+- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, CIE Lab; writing 16-bit, CMYK or planar data.
 
 Pixels match libtiff 4.5.1 and Pillow 10.2.0.
 
