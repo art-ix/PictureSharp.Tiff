@@ -27,6 +27,17 @@ internal sealed class TiffBuilder
             .Set(279, Long, (uint)pixels.Length);
     }
 
+    /// <summary>An 8-bit greyscale image in one strip of already compressed data.</summary>
+    public static TiffBuilder GrayStrip(int width, int height, ushort compression, byte[] strip) =>
+        new TiffBuilder(strip)
+            .Set(256, Long, (uint)width)
+            .Set(257, Long, (uint)height)
+            .Set(258, Short, 8)
+            .Set(259, Short, compression)
+            .Set(262, Short, 1)
+            .Set(278, Long, (uint)height)
+            .Set(279, Long, (uint)strip.Length);
+
     public TiffBuilder Set(ushort tag, ushort type, params uint[] values)
     {
         entries[tag] = (type, values);

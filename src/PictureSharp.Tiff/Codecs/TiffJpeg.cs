@@ -5,7 +5,8 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// <summary>
 /// JPEG compression (7). Each strip or tile is an abbreviated JPEG stream whose tables may live in the JPEGTables tag;
 /// the two are joined into one interchange stream and decoded by the configuration's JPEG codec through
-/// <see cref="ImageDecodeContext.DecodeEmbedded"/>, which also does the YCbCr conversion and chroma upsampling.
+/// <see cref="ImageDecodeContext.DecodeEmbeddedPart"/>, which also does the YCbCr conversion and chroma upsampling.
+/// A chunk may not decode to more than its strip or tile size and is not charged against the reserved image.
 /// </summary>
 internal sealed class TiffJpeg
 {
@@ -14,6 +15,8 @@ internal sealed class TiffJpeg
 
     private readonly byte[] tables;
     private readonly bool rgb;
+    private readonly int chunkWidth;
+    private readonly int chunkHeight;
 
     public TiffJpeg(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout)
     {
@@ -26,6 +29,7 @@ internal sealed class TiffJpeg
         // The tables stream without its EOI; an empty array when the strips carry their own tables.
         tables = stored.IsEmpty ? [] : stored[..^2].ToArray();
         rgb = layout.Photometric == TiffLayout.Rgb;
+        (chunkWidth, chunkHeight) = (layout.ChunkWidth, layout.ChunkHeight);
     }
 
     // port: libtiff/tif_jpeg.c JPEGPreDecode: the tables are read before the strip's own stream, and RGB photometric
@@ -57,7 +61,7 @@ internal sealed class TiffJpeg
             stream = joined;
         }
 
-        using Image image = context.DecodeEmbedded(stream);
+        using Image image = context.DecodeEmbeddedPart(stream, chunkWidth, chunkHeight);
         if (image.Width < width || image.Height < rows)
         {
             throw TiffDecoder.Error($"A TIFF JPEG strip or tile decodes to {image.Width}x{image.Height}, smaller than its {width}x{rows} pixels.");

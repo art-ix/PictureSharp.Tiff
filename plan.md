@@ -2,7 +2,7 @@
 
 Wtyczka TIFF (tylko odczyt) dla PictureSharp, wydzielona z `PictureSharp.Formats.Extra` (decyzja użytkownika
 z 2026-10-17). Osobne repozytorium i własny SemVer, jak `PictureSharp.Heif`. Zależność wyłącznie od publicznego pakietu
-`PictureSharp` (minimum 0.7.1), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
+`PictureSharp` (minimum 0.7.8), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
 użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia).
 
 **Status: 0.3.0 zaimplementowana lokalnie (2026-10-21), bez wydania; 0.2.0 w commicie `64ec003`.** Wersja 0.1.0 to
@@ -74,11 +74,12 @@ lub od razu 0.3.0 (do decyzji użytkownika).
 - Znalezione błędy libtiff 4.5.1 (pliki zastąpione): zapis big-endian z predyktorem 3 ma płaszczyzny bajtów w kolejności
   hosta i libtiff sam ich nie odczytuje (plik testowy zapisany ręcznie wg specyfikacji); RLEW wyrównuje wiersze inaczej
   przy zapisie i odczycie (wyrocznią jest odczyt libtiff, który port odtwarza bit w bit).
-- Ograniczenie: `DecodeEmbedded` dolicza piksele pasków JPEG do `MaxPixels`, więc JPEG-TIFF wymaga ok. 2× swojej liczby
-  pikseli — zgłoszone do rdzenia.
+- Paski i kafle JPEG przez `DecodeEmbeddedPart` (rdzeń 0.7.8): każdy w limicie rozmiaru paska/kafla, bez doliczania do
+  `MaxPixels` obrazu; JPEG większy niż jego pasek lub kafel → `ImageFormatException`. Minimum PictureSharp 0.7.8.
 
 ## Zgłoszenia do rdzenia
 
-- `DecodeEmbedded` w już zarezerwowanym budżecie (paski JPEG): wpis w tabeli luk rdzenia (2026-10-21).
+- `DecodeEmbedded` w już zarezerwowanym budżecie (paski JPEG): zgłoszone 2026-10-21, zamknięte w rdzeniu 0.7.8
+  (`ImageDecodeContext.DecodeEmbeddedPart`); wtyczka korzysta z niego od 0.3.0.
 - Opcje dekodera per wtyczka (wybór strony TIFF): zamknięte w rdzeniu 0.7.6 (`DecoderOptions.FormatOptions`). Użycie
-  wymaga podniesienia minimalnej wersji `PictureSharp` z 0.7.1 do 0.7.6; do zaplanowania (0.2.x lub 0.3.0).
+  wymaga minimalnej wersji `PictureSharp` 0.7.6 (0.3.0 ma już 0.7.8); wybór strony do zaplanowania.

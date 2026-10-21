@@ -11,8 +11,8 @@ namespace PictureSharp.Formats.Tiff;
 /// Identifying an image reports the number of full-resolution pages
 /// as <see cref="ImageInfo.ContainerItemCount"/>. Samples deeper than 8 bits become <c>round(v / 257)</c>; floating-point
 /// samples are clamped to [0, 1] and scaled to 255. The EXIF, GPS and orientation tags form
-/// <see cref="ImageMetadata.Exif"/>. JPEG strips are decoded under the same <see cref="DecoderOptions.MaxPixels"/>
-/// budget as the image, so such files need about twice their pixel count.
+/// <see cref="ImageMetadata.Exif"/>. JPEG strips and tiles are decoded by the configuration's JPEG codec, each within
+/// its own strip or tile size, so <see cref="DecoderOptions.MaxPixels"/> applies to the image as for other compressions.
 /// </remarks>
 /// <example>
 /// <code>

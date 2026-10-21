@@ -6,8 +6,7 @@
 > BigTIFF file: strips or tiles, contiguous or planar samples, no compression, PackBits, LZW, Deflate (predictors 2
 > and 3), JPEG and CCITT RLE/Group 3/Group 4; greyscale, palette, RGB, CMYK, YCbCr and 32-bit floating-point samples
 > with optional alpha; ICC, XMP, EXIF/GPS, orientation and resolution. Old-style JPEG, JBIG, LZMA, Zstandard, WebP,
-> CIE Lab and signed samples throw `NotSupportedException`. A JPEG-compressed TIFF currently needs `MaxPixels` of
-> about twice its pixel count, because every strip is decoded by the JPEG codec under the same limit. See
+> CIE Lab and signed samples throw `NotSupportedException`. Requires PictureSharp 0.7.8 or later. See
 > [plan.md](plan.md).
 
 ```csharp

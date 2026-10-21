@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PictureSharp.Formats.Jpeg;
 
 namespace PictureSharp.Formats.Tiff.Tests;
 
@@ -63,14 +64,29 @@ public sealed class JpegTests
     }
 
     [Test]
-    public async Task MaxPixels_CoversTheImageAndItsJpegChunks()
+    [Arguments("jpeg_ycbcr_strips.tif")]
+    [Arguments("jpeg_ycbcr_tiles.tif")]
+    public async Task MaxPixels_CoversTheImageOnly(string name)
     {
-        // DecodeEmbedded charges every strip against the same budget as the image, so a JPEG TIFF needs twice its
-        // pixel count (the core plan has the request to decode into an already reserved canvas).
-        byte[] data = TestSupport.ReadCorpus("jpeg_ycbcr_strips.tif");
-        using Image image = TestSupport.Load(data, TestSupport.Options with { MaxPixels = 2 * 64 * 48 });
+        // DecodeEmbeddedPart gives each strip or tile its own allowance instead of charging it next to the image.
+        byte[] data = TestSupport.ReadCorpus(name);
+        using Image image = TestSupport.Load(data, TestSupport.Options with { MaxPixels = 64 * 48, MaxFrames = 1 });
         await Assert.That(image.Width).IsEqualTo(64);
-        await Assert.That(() => TestSupport.Load(data, TestSupport.Options with { MaxPixels = 2 * 64 * 48 - 1 })).Throws<ImageFormatException>();
+        await Assert.That(() => TestSupport.Load(data, TestSupport.Options with { MaxPixels = 64 * 48 - 1 })).Throws<ImageFormatException>();
+    }
+
+    [Test]
+    public async Task JpegLargerThanItsStrip_IsRejected()
+    {
+        byte[] jpeg;
+        using (var source = new Image(16, 16, new Rgba32(90, 90, 90, 255)))
+        {
+            jpeg = source.ToJpeg();
+        }
+
+        byte[] data = TiffBuilder.GrayStrip(16, 8, 7, jpeg).Build();
+        ImageFormatException error = Assert.ThrowsExactly<ImageFormatException>(() => TestSupport.Load(data));
+        await Assert.That(error.Format).IsSameReferenceAs(ImageFormat.Jpeg);
     }
 
     private sealed record JpegEntry(int Width, int Height, JsonElement[][] Chunks, string Pillow);
