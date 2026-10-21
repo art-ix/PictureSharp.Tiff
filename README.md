@@ -4,13 +4,13 @@
 
 The plugin reads TIFF and BigTIFF files, one full-resolution page at a time.
 
-- **Compression:** none, PackBits, LZW, Deflate, JPEG and CCITT fax (RLE, Group 3, Group 4).
+- **Compression:** none, PackBits, LZW, Deflate, JPEG, WebP and CCITT fax (RLE, Group 3, Group 4).
 - **Pixels:** greyscale, palette, RGB, CMYK, YCbCr and 32-bit float, with or without alpha.
 - **Metadata:** ICC, XMP, EXIF/GPS, orientation and resolution.
-- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, WebP, CIE Lab and signed samples
+- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, CIE Lab and signed samples
   (`NotSupportedException`).
 
-Requires PictureSharp 0.7.8 or later. See the
+Requires PictureSharp 0.7.9 or later. See the
 [release notes](https://github.com/art-ix/PictureSharp.Tiff/tree/main/docs/releases) and the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md).
 
