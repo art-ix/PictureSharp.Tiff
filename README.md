@@ -1,17 +1,15 @@
 # PictureSharp.Tiff
 
-**TIFF for [PictureSharp](https://github.com/art-ix/PictureSharp), in 100% C#. No native dependencies.**
-
-Reads and writes TIFF and BigTIFF on .NET 10+ with PictureSharp 0.7.9+.
+TIFF and BigTIFF for [PictureSharp](https://github.com/art-ix/PictureSharp), in pure C# with no native dependencies.
+Requires .NET 10+ and PictureSharp 0.7.9+.
 
 ```bash
 dotnet add package PictureSharp.Tiff
 ```
 
-## Use
+## Usage
 
-Register the format once; `Image.Load`, `Identify`, `ReadMetadata`, `EditMetadata` and `Save` then handle `.tif` and
-`.tiff`:
+Register the format once, then load and save `.tif` files like any other image:
 
 ```csharp
 using PictureSharp;
@@ -19,28 +17,25 @@ using PictureSharp.Formats.Tiff;
 
 ImageConfiguration.Default = ImageConfiguration.Default.ToBuilder().AddFormat(new TiffFormat()).Build();
 
-using var image = Image.Load("scan.tif");          // first page; ICC, EXIF and XMP kept
-image.Mutate(x => x.AutoOrient().Resize(1600, 0));
-image.SaveAsTiff("small.tif");                     // LZW, smallest lossless colour type
-image.SaveAsTiff("photo.tif", new TiffEncoderOptions { Compression = TiffCompression.Jpeg, JpegQuality = 90 });
-
-int pages = Image.Identify("fax.tif").ContainerItemCount;
-using var second = Image.Load("fax.tif", new DecoderOptions { FormatOptions = [new TiffDecoderOptions { Page = 1 }] });
+using var image = Image.Load("scan.tif");
+image.Mutate(x => x.Resize(1600, 0));
+image.SaveAsTiff("small.tif");
 ```
 
-Every frame of an `Image` is written as a page.
+Loading reads the first page and keeps ICC, EXIF and XMP. Saving uses lossless LZW and writes each frame as a page.
+Other pages, JPEG compression and tiles are covered in the guides below.
 
 ## Support
 
-| | |
-| --- | --- |
-| Read | TIFF and BigTIFF, strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP, CCITT fax; grey 1–16 bits, palette, RGB, CMYK, YCbCr, 32-bit float, with or without alpha |
-| Write | pages, strips or tiles, TIFF or BigTIFF; none, PackBits, LZW, Deflate, JPEG, WebP, CCITT Group 4; 8-bit grey, RGB, palette and black and white, with or without alpha |
-| Metadata | ICC, XMP, EXIF/GPS, orientation and resolution: read, written and edited in place |
-| Not supported | old-style JPEG, JBIG, LZMA, Zstandard, CIE Lab, signed samples; writing 16-bit, CMYK or planar data |
+- **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP and CCITT fax; grey, palette, RGB, CMYK,
+  YCbCr and float, with or without alpha.
+- **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha; the same compressions (CCITT
+  Group 4 only).
+- **Metadata:** ICC, XMP, EXIF/GPS, orientation and resolution, also edited in place.
+- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, CIE Lab, signed samples; writing 16-bit, CMYK or planar
+  data.
 
-Pixels match libtiff 4.5.1 and Pillow 10.2.0, and compression runs in parallel
-([speed](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/encoding.md#speed)).
+Pixels match libtiff 4.5.1 and Pillow 10.2.0.
 
 Guides: [decoding](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/decoding.md) ·
 [encoding](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/encoding.md) ·
