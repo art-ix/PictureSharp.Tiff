@@ -6,7 +6,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.5 (writer, compressions,
-EXIF and metadata editing, WebP) done locally. Next: 0.5.0 multi-page, tiles, BigTIFF and the release with writing.**
+EXIF and metadata editing, WebP) done locally; 0.5.0 part 1 (multi-page, tiles, BigTIFF, parallel compression) done
+locally. Next: 0.5.0 part 2 (benchmark, Native AOT, documentation) and the release with writing.**
 
 ## Versions
 
@@ -21,7 +22,7 @@ EXIF and metadata editing, WebP) done locally. Next: 0.5.0 multi-page, tiles, Bi
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Done, local |
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Done, local |
-| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
+| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Part 1 done, local |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
@@ -280,6 +281,35 @@ Done 2026-10-21. Decisions and deviations:
   output through the oracles; Native AOT consumer encoding and decoding without trim warnings; release notes,
   `PackageReleaseNotes`, README with a writing example; core README footnote updated (TIFF read and write).
 
+Part 1 (multi-page, tiles, BigTIFF, parallel compression) done 2026-10-21. Decisions and deviations:
+- The BigTIFF option is `Container` (`TiffContainer.Auto`, `Classic`, `BigTiff`) instead of `BigTiff`, so the choice
+  reads as a variant rather than a flag. Auto picks BigTIFF when the uncompressed samples and IFDs exceed 4 GiB; a
+  compressed classic file that still exceeds 4 GiB throws `NotSupportedException` naming `TiffContainer.BigTiff`.
+  Offsets and byte counts are LONG8 in BigTIFF, sub-IFD pointers IFD8.
+- Layout: header, the chunks of every page, then all IFDs linked in page order (libtiff writes each IFD after its
+  page; any order is valid). Only the header is patched, so non-seekable streams spool the data as before. Single-page
+  classic output is byte-identical to 0.4.5 (all 51 earlier snapshots unchanged).
+- Pages: NewSubfileType 2 and PageNumber (index, count) only when there are several pages. Each page chooses its own
+  `Auto` colour type and palette; resolution, ICC, XMP and EXIF are written on every page, so any page loads with the
+  image's metadata.
+- Tiles: `TileSize` is square (one int, a positive multiple of 16; 0 = strips); together with `RowsPerStrip` throws
+  `ArgumentException`. Edge tiles repeat the last column and row (better for predictors and JPEG chroma than zeros).
+  JPEG and WebP tiles are complete streams of the full tile; WebP tiles are limited to 16383.
+- Parallelism: `MaxDegreeOfParallelism` (-1 = processor count, as the core encoders). Chunks are compressed in batches
+  of 4 per thread, each thread with its own buffers and codec state, and written in order; the core JPEG and WebP
+  encoders get 1 when chunks run in parallel. Output is the same for every degree (tested for every compression,
+  strips and tiles, including Deflate within one runtime).
+- Oracle limits found (`verify_written.py`): libtiff 4.5.1 `TIFFReadRGBAImage` misplaces grey+alpha pixels in tiles cut
+  by the right edge (`putagreytile` does not scale `fromskew` by the samples per pixel; same for files libtiff writes),
+  so those files compare `TIFFReadEncodedTile` samples; Pillow 10.2.0 does not know IFD8, so BigTIFF EXIF is checked by
+  libtiff only. libtiff exports no `TIFFRawTileSize`; raw tile sizes come from TileByteCounts.
+- Measured: 62/62 snapshots (11 new: tiles for every compression, BigTIFF strips and tiles with EXIF, two 3-page files)
+  through libtiff and Pillow, with LZW, PackBits and Group 4 tiles byte-identical to libtiff's; corpus 637/637 (91
+  images also as LZW tiles of 32 in BigTIFF). 1467 tests.
+- Frame-writer SPI: `ISequentialImageEncoder` (behind `Image.CreateFrameWriter`) is internal to the core, so a plugin
+  cannot write pages one at a time; the encoder needs the whole `Image`. Not requested yet; a core request if users
+  need page-by-page writing of large documents.
+
 ## Core requests
 
 - `DecodeEmbeddedPart` (JPEG strips within the image budget): closed in core 0.7.8.
@@ -292,3 +322,21 @@ Done 2026-10-21. Decisions and deviations:
 - To check during 0.5.0: a frame-writer SPI for plugins (`Image.CreateFrameWriter` supports only GIF, APNG and WebP),
   which would allow writing multi-page TIFF page by page without holding every frame. Report to the core `plan.md` if
   needed.
+
+## Deferred
+
+- **Zstandard (50000), read and write:** deferred until the project targets .NET 11 or later, whose
+  `System.IO.Compression` adds `ZstandardStream`, `ZstandardEncoder` and `ZstandardDecoder` (decided 2026-10-21).
+  .NET 10 has no Zstandard, and a pure C# decoder (RFC 8878, port of zstd's educational decoder) would be about
+  1500–2000 lines to maintain for a format seen mostly in GDAL GeoTIFF; an encoder several times more. The system
+  libtiff 4.5.1 has ZSTD configured, so the corpus can be written with `generate_corpus.py`. Until then ZSTD throws
+  `NotSupportedException`. LZMA (34925) stays out of scope: .NET has no plans for it (dotnet/runtime#1542).
+- **Old-style JPEG (6), read only:** a candidate if there is demand (decided 2026-10-21). It still appears in 1990s
+  document archives (Kodak/Wang Imaging and similar scanners). The work is a port of the stream reconstruction in
+  libtiff `tif_ojpeg.c` (about 600–1000 lines: a complete `JPEGInterchangeFormat` stream, or one rebuilt from the
+  `JPEGQTables`, `JPEGDCTables` and `JPEGACTables` tags, with libtiff's workarounds), with decoding left to the core
+  JPEG codec through `DecodeEmbeddedPart`. No tool writes OJPEG, so validation needs real files from outside the
+  repository (asked for before downloading), compared against the system libtiff, which reads them.
+- **JBIG (34661):** out of scope. Bilevel only and rare; libtiff delegates to jbigkit (GPL), which cannot be ported
+  into MIT code, so a decoder would be written from ITU T.82 (about 1000–1500 lines: QM arithmetic coder, context
+  templates, typical prediction, resolution layers) for very few files.

@@ -112,12 +112,13 @@ internal static class EncoderSupport
         return pixels;
     }
 
-    /// <summary>The raw strips of the first IFD of a little-endian TIFF.</summary>
+    /// <summary>The raw strips or tiles of the first IFD of a little-endian classic TIFF.</summary>
     public static List<byte[]> Strips(byte[] file)
     {
         var tags = Tags(file);
-        (_, uint count, uint offsets) = tags[273];
-        uint counts = tags[279].Value;
+        bool tiled = tags.ContainsKey(324);
+        (_, uint count, uint offsets) = tags[tiled ? (ushort)324 : (ushort)273];
+        uint counts = tags[tiled ? (ushort)325 : (ushort)279].Value;
         var strips = new List<byte[]>();
         for (int i = 0; i < count; i++)
         {
@@ -137,25 +138,38 @@ internal static class EncoderSupport
         Strips(file).All(strip => JpegComponents(strip) == components) && StripsMatch(file, image);
 
     /// <summary>
-    /// Whether each strip of <paramref name="file"/> is a complete image stream (JPEG or WebP) of the strip's own rows
-    /// that the core decodes to the same pixels as <paramref name="image"/>.
+    /// Whether each strip or tile of <paramref name="file"/> is a complete image stream (JPEG or WebP) of the chunk's own
+    /// size (a strip's own rows, a full tile) that the core decodes to the same visible pixels as <paramref name="image"/>.
     /// </summary>
     public static bool StripsMatch(byte[] file, Image image)
     {
-        int rowsPerStrip = (int)Tags(file)[278].Value, y0 = 0;
-        foreach (byte[] strip in Strips(file))
+        var tags = Tags(file);
+        bool tiled = tags.ContainsKey(322);
+        int chunkWidth = tiled ? (int)tags[322].Value : image.Width;
+        int chunkHeight = (int)tags[tiled ? (ushort)323 : (ushort)278].Value;
+        int across = (image.Width + chunkWidth - 1) / chunkWidth, index = 0;
+        foreach (byte[] chunk in Strips(file))
         {
-            using Image part = Image.Load(strip, TestSupport.Options);
-            if (part.Width != image.Width || part.Height != Math.Min(rowsPerStrip, image.Height - y0)
-                || !part.GetPixelSpan().SequenceEqual(image.GetPixelSpan().Slice(y0 * image.Width, part.Width * part.Height)))
+            int x0 = index % across * chunkWidth, y0 = index / across * chunkHeight;
+            int width = Math.Min(chunkWidth, image.Width - x0), rows = Math.Min(chunkHeight, image.Height - y0);
+            using Image part = Image.Load(chunk, TestSupport.Options);
+            if (part.Width != (tiled ? chunkWidth : width) || part.Height != (tiled ? chunkHeight : rows))
             {
                 return false;
             }
 
-            y0 += rowsPerStrip;
+            for (int y = 0; y < rows; y++)
+            {
+                if (!part.GetPixelSpan().Slice(y * part.Width, width).SequenceEqual(image.GetPixelSpan().Slice(((y0 + y) * image.Width) + x0, width)))
+                {
+                    return false;
+                }
+            }
+
+            index++;
         }
 
-        return y0 >= image.Height;
+        return index == across * ((image.Height + chunkHeight - 1) / chunkHeight);
     }
 
     /// <summary>The component count of the first SOF segment of a JPEG stream.</summary>

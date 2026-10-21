@@ -5,7 +5,7 @@ public static class TiffImageExtensions
 {
     extension(Image image)
     {
-        /// <summary>Saves the image as TIFF; null options mean the defaults. Animations keep the first frame only.</summary>
+        /// <summary>Saves the image as TIFF; null options mean the defaults. Each frame becomes a page (see <see cref="TiffEncoderOptions.SaveAllPages"/>).</summary>
         public void SaveAsTiff(string path, TiffEncoderOptions? options = null) => image.Save(path, options ?? new());
 
         /// <summary>Writes the image to a stream as TIFF; null options mean the defaults. The stream is left open.</summary>

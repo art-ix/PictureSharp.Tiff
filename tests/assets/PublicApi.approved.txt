@@ -1,5 +1,6 @@
 PictureSharp.Formats.Tiff.TiffColorType
 PictureSharp.Formats.Tiff.TiffCompression
+PictureSharp.Formats.Tiff.TiffContainer
 PictureSharp.Formats.Tiff.TiffDecoderOptions
   Boolean Equals(PictureSharp.Formats.FormatDecoderOptions)
   Boolean Equals(PictureSharp.Formats.Tiff.TiffDecoderOptions)
@@ -17,18 +18,24 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Boolean Equals(PictureSharp.EncoderOptions)
   Boolean Equals(PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Boolean Equals(System.Object)
+  Boolean SaveAllPages
   Boolean WebPLossless
+  Boolean get_SaveAllPages()
   Boolean get_WebPLossless()
   Boolean op_Equality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
   Int32 DeflateLevel
   Int32 GetHashCode()
   Int32 JpegQuality
+  Int32 MaxDegreeOfParallelism
   Int32 RowsPerStrip
+  Int32 TileSize
   Int32 WebPQuality
   Int32 get_DeflateLevel()
   Int32 get_JpegQuality()
+  Int32 get_MaxDegreeOfParallelism()
   Int32 get_RowsPerStrip()
+  Int32 get_TileSize()
   Int32 get_WebPQuality()
   PictureSharp.Formats.Jpeg.JpegSubsampling JpegSubsampling
   PictureSharp.Formats.Jpeg.JpegSubsampling get_JpegSubsampling()
@@ -36,6 +43,8 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   PictureSharp.Formats.Tiff.TiffColorType get_ColorType()
   PictureSharp.Formats.Tiff.TiffCompression Compression
   PictureSharp.Formats.Tiff.TiffCompression get_Compression()
+  PictureSharp.Formats.Tiff.TiffContainer Container
+  PictureSharp.Formats.Tiff.TiffContainer get_Container()
   PictureSharp.Formats.Tiff.TiffEncoderOptions <Clone>$()
   PictureSharp.Formats.Tiff.TiffPredictor Predictor
   PictureSharp.Formats.Tiff.TiffPredictor get_Predictor()
@@ -45,11 +54,15 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Void .ctor()
   Void set_ColorType(PictureSharp.Formats.Tiff.TiffColorType)
   Void set_Compression(PictureSharp.Formats.Tiff.TiffCompression)
+  Void set_Container(PictureSharp.Formats.Tiff.TiffContainer)
   Void set_DeflateLevel(Int32)
   Void set_JpegQuality(Int32)
   Void set_JpegSubsampling(PictureSharp.Formats.Jpeg.JpegSubsampling)
+  Void set_MaxDegreeOfParallelism(Int32)
   Void set_Predictor(PictureSharp.Formats.Tiff.TiffPredictor)
   Void set_RowsPerStrip(Int32)
+  Void set_SaveAllPages(Boolean)
+  Void set_TileSize(Int32)
   Void set_WebPLossless(Boolean)
   Void set_WebPQuality(Int32)
 PictureSharp.Formats.Tiff.TiffFormat

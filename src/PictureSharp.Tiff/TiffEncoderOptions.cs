@@ -1,12 +1,12 @@
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// Options for the TIFF encoder, which writes the first frame as one little-endian classic TIFF page in strips with
+/// Options for the TIFF encoder, which writes every frame as one little-endian TIFF page, in strips or tiles with
 /// contiguous 8-bit (or 1-bit black-and-white) samples, by default LZW-compressed with the horizontal predictor.
 /// Resolution is always written (in dots per inch). When <see cref="EncoderOptions.Metadata"/> allows them, ICC and XMP
 /// are written as tags 34675 and 700, and the EXIF block as the image IFD's descriptive tags and orientation with its
-/// EXIF, GPS and interoperability IFDs; Software always names this encoder, and an EXIF block that is not a TIFF stream
-/// is left out.
+/// EXIF, GPS and interoperability IFDs, on every page; Software always names this encoder, and an EXIF block that is not
+/// a TIFF stream is left out. The output does not depend on <see cref="MaxDegreeOfParallelism"/>.
 /// </summary>
 /// <example>
 /// <code>
@@ -18,7 +18,7 @@ public sealed record TiffEncoderOptions : EncoderOptions
     /// <inheritdoc/>
     public override ImageFormat Format => TiffFormat.Descriptor;
 
-    /// <summary>The compression of each strip. Default: <see cref="TiffCompression.Lzw"/>.</summary>
+    /// <summary>The compression of each strip or tile. Default: <see cref="TiffCompression.Lzw"/>.</summary>
     public TiffCompression Compression
     {
         get;
@@ -87,11 +87,44 @@ public sealed record TiffEncoderOptions : EncoderOptions
 
     /// <summary>
     /// The number of rows in each strip, or 0 to choose strips of about 64 KiB of uncompressed samples. Values above the
-    /// image height mean one strip. Default: 0.
+    /// image height mean one strip. Setting it together with <see cref="TileSize"/> makes saving fail with
+    /// <see cref="ArgumentException"/>. Default: 0.
     /// </summary>
     public int RowsPerStrip
     {
         get;
         init => field = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(RowsPerStrip), value, "Rows per strip cannot be negative.");
     }
+
+    /// <summary>
+    /// The width and height of square tiles, a positive multiple of 16, or 0 to write strips. Tiles at the right and
+    /// bottom edges are padded by repeating the last column and row. Default: 0.
+    /// </summary>
+    public int TileSize
+    {
+        get;
+        init => field = value >= 0 && value % 16 == 0 ? value : throw new ArgumentOutOfRangeException(nameof(TileSize), value, "The tile size must be 0 or a positive multiple of 16.");
+    }
+
+    /// <summary>Classic TIFF or BigTIFF. Default: <see cref="TiffContainer.Auto"/>.</summary>
+    public TiffContainer Container
+    {
+        get;
+        init => field = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(Container), value, "Unknown TIFF container.");
+    }
+
+    /// <summary>
+    /// Whether every frame becomes a page (NewSubfileType 2 and PageNumber on each page when there are several); false
+    /// writes the first frame only. Each page chooses its own <see cref="TiffColorType.Auto"/> colour type. Default: true.
+    /// </summary>
+    public bool SaveAllPages { get; init; } = true;
+
+    /// <summary>
+    /// The maximum number of strips or tiles compressed at once (1 = single-threaded, -1 = one per processor). Default: -1.
+    /// </summary>
+    public int MaxDegreeOfParallelism
+    {
+        get;
+        init => field = value is -1 or >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(MaxDegreeOfParallelism), value, "Expected -1 or a positive number.");
+    } = -1;
 }

@@ -391,16 +391,25 @@ public sealed class EncoderTests
         await Assert.That(() => new TiffEncoderOptions { JpegQuality = 0 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { JpegQuality = 101 }).Throws<ArgumentOutOfRangeException>();
         await Assert.That(() => new TiffEncoderOptions { JpegSubsampling = (JpegSubsampling)9 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { TileSize = 8 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { TileSize = -16 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { Container = (TiffContainer)9 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { MaxDegreeOfParallelism = 0 }).Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new TiffEncoderOptions { MaxDegreeOfParallelism = -2 }).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]
-    public async Task AnimatedImage_WritesTheFirstFrame()
+    public async Task SaveAllPagesFalse_WritesTheFirstFrame()
     {
         using Image source = EncoderSupport.Pattern(6, 4);
         using Image second = EncoderSupport.Pattern(6, 4, gray: true);
         source.Frames.AddClone(second.Frames[0]);
-        using Image decoded = TestSupport.Load(source.ToTiff(EncoderSupport.Options()));
+        byte[] file = source.ToTiff(EncoderSupport.Options() with { SaveAllPages = false });
+        using Image decoded = TestSupport.Load(file);
         await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(TestSupport.Identify(file).ContainerItemCount).IsEqualTo(1);
+        using Image first = EncoderSupport.Pattern(6, 4);
+        await Assert.That(file.AsSpan().SequenceEqual(first.ToTiff(EncoderSupport.Options()))).IsTrue();
     }
 
     [Test]
@@ -424,7 +433,7 @@ public sealed class EncoderTests
         }
     }
 
-    private sealed class ForwardOnlyStream(Stream inner) : Stream
+    internal sealed class ForwardOnlyStream(Stream inner) : Stream
     {
         public override bool CanRead => false;
 

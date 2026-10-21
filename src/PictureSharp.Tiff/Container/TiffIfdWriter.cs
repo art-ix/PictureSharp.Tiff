@@ -42,6 +42,26 @@ internal sealed class TiffIfdWriter(bool bigEndian = false, bool bigTiff = false
         Add(tag, TiffEntry.Long, (uint)values.Length, value);
     }
 
+    /// <summary>File offsets or byte counts: LONG in classic TIFF, LONG8 in BigTIFF.</summary>
+    public void AddOffsets(ushort tag, ReadOnlySpan<ulong> values)
+    {
+        int size = OffsetSize;
+        byte[] value = new byte[values.Length * size];
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (bigTiff)
+            {
+                BinaryPrimitives.WriteUInt64LittleEndian(value.AsSpan(i * 8), values[i]);
+            }
+            else
+            {
+                BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(i * 4), checked((uint)values[i]));
+            }
+        }
+
+        Add(tag, bigTiff ? TiffEntry.Long8 : TiffEntry.Long, (uint)values.Length, value);
+    }
+
     public void AddRational(ushort tag, uint numerator, uint denominator) => AddRational(tag, [numerator, denominator]);
 
     /// <summary>Rationals given as numerator, denominator pairs.</summary>

@@ -110,6 +110,22 @@ public sealed class WrittenFileTests
         yield return ("webp_gray_lossless_16x8", () => EncoderSupport.Pattern(16, 8, gray: true), EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgb);
         yield return ("webp_rgb_lossy_96x64", () => EncoderSupport.Pattern(96, 64), EncoderSupport.Options(compression: TiffCompression.WebP), TiffColorType.Rgb);
         yield return ("webp_rgba_lossy_70x41_q90_rows16", () => EncoderSupport.Pattern(70, 41, alpha: true), EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.WebP) with { WebPQuality = 90 }, TiffColorType.Rgba);
+        yield return ("rgb_70x41_lzw_tiles16", () => EncoderSupport.Pattern(70, 41), EncoderSupport.Options(compression: TiffCompression.Lzw) with { TileSize = 16 }, TiffColorType.Rgb);
+        yield return ("gray_alpha_33x17_tiles16", () => EncoderSupport.Pattern(33, 17, gray: true, alpha: true), EncoderSupport.Options() with { TileSize = 16 }, TiffColorType.GrayscaleAlpha);
+        yield return ("palette_40x30_packbits_tiles32", () => EncoderSupport.Pattern(40, 30, posterize: true), EncoderSupport.Options(compression: TiffCompression.PackBits) with { TileSize = 32 }, TiffColorType.Palette);
+        yield return ("bw_noise_61x40_g4_tiles16", () => EncoderSupport.Bilevel(61, 40, noise: true), EncoderSupport.Options(compression: TiffCompression.CcittGroup4) with { TileSize = 16 }, TiffColorType.BlackWhite);
+        yield return ("rgba_70x41_deflate_tiles32", () => EncoderSupport.Pattern(70, 41, alpha: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { TileSize = 32 }, TiffColorType.Rgba);
+        yield return ("jpeg_rgb_70x41_tiles32", () => EncoderSupport.Pattern(70, 41), EncoderSupport.Options(compression: TiffCompression.Jpeg) with { TileSize = 32 }, TiffColorType.Rgb);
+        yield return ("webp_rgba_lossless_70x41_tiles32", () => EncoderSupport.Pattern(70, 41, alpha: true), EncoderSupport.Options(compression: TiffCompression.WebP) with { TileSize = 32, WebPLossless = true }, TiffColorType.Rgba);
+        yield return ("rgb_bigtiff_33x17_lzw_rows5", () => EncoderSupport.Pattern(33, 17), EncoderSupport.Options(rowsPerStrip: 5, compression: TiffCompression.Lzw) with { Container = TiffContainer.BigTiff }, TiffColorType.Rgb);
+        yield return ("gray_exif_bigtiff_70x41_tiles16", () =>
+        {
+            Image image = EncoderSupport.Pattern(70, 41, gray: true);
+            image.Metadata.Exif = ExifSample.Block(bigEndian: true);
+            return image;
+        }, EncoderSupport.Options(compression: TiffCompression.PackBits) with { Container = TiffContainer.BigTiff, TileSize = 16 }, TiffColorType.Grayscale);
+        yield return ("pages3_33x17_lzw", Pages, EncoderSupport.Options(compression: TiffCompression.Lzw), TiffColorType.Rgb);
+        yield return ("pages3_bigtiff_33x17_tiles16", Pages, EncoderSupport.Options(compression: TiffCompression.Deflate) with { Container = TiffContainer.BigTiff, TileSize = 16 }, TiffColorType.Rgb);
         yield return ("gray_7x3_deflate_level0", () => EncoderSupport.Pattern(7, 3, gray: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { DeflateLevel = 0 }, TiffColorType.Grayscale);
     }
 
@@ -138,8 +154,21 @@ public sealed class WrittenFileTests
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
             }
 
-            manifest[name + ".tif"] = Entry(image, lossy ? Decoded(image, Received, name) : null,
-                MetadataWriteTests.ExifReference(source.Metadata.Exif, Received, name));
+            string? exif = MetadataWriteTests.ExifReference(source.Metadata.Exif, Received, name);
+            JsonObject entry = Entry(image, lossy ? Decoded(image, Received, name) : null, exif);
+            if (source.FrameCount > 1)
+            {
+                var pages = new JsonArray();
+                for (int page = 1; page < source.FrameCount; page++)
+                {
+                    using Image pageImage = TestSupport.Load(file, TestSupport.Page(page));
+                    pages.Add(Entry(pageImage, null, exif));
+                }
+
+                entry["pages"] = pages;
+            }
+
+            manifest[name + ".tif"] = entry;
 
             string snapshot = Path.Combine(Snapshots, name + ".tif");
             File.WriteAllBytes(Path.Combine(Received, name + ".tif"), file);
@@ -160,7 +189,7 @@ public sealed class WrittenFileTests
 
     /// <summary>
     /// Every corpus image written with each lossless compression (WebP lossless included) must read back as the same
-    /// pixels, and with CCITT Group 4 as its black-and-white threshold. The files go to <c>written.corpus</c> in the output directory, where
+    /// pixels, and with CCITT Group 4 as its black-and-white threshold; it is also written as LZW tiles in BigTIFF. The files go to <c>written.corpus</c> in the output directory, where
     /// <c>verify_written.py</c> checks them against libtiff and Pillow and compares the LZW, PackBits and Group 4 strips
     /// with libtiff's on the same samples.
     /// </summary>
@@ -190,17 +219,39 @@ public sealed class WrittenFileTests
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(expected);
                 Record(name, compression, file, source, image, manifest);
             }
+
+            // Tiles and BigTIFF together: LZW tiles of 32, so libtiff also re-encodes the tiles.
+            byte[] tiled = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw) with { TileSize = 32, Container = TiffContainer.BigTiff });
+            using Image tiledImage = TestSupport.Load(tiled);
+            await Assert.That(EncoderSupport.Sha256(tiledImage.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            Record(name, "lzw-tiles-bigtiff", tiled, source, tiledImage, manifest);
         }
 
         File.WriteAllText(Path.Combine(CorpusOutput, "written.json"), manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void Record(string name, TiffCompression compression, byte[] file, Image source, Image image, JsonObject manifest)
+    private static void Record(string name, TiffCompression compression, byte[] file, Image source, Image image, JsonObject manifest) =>
+        Record(name, compression.ToString().ToLowerInvariant(), file, source, image, manifest, compression == TiffCompression.Jpeg);
+
+    private static void Record(string name, string variant, byte[] file, Image source, Image image, JsonObject manifest, bool lossy = false)
     {
-        string stem = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}";
+        string stem = $"{Path.GetFileNameWithoutExtension(name)}.{variant}";
         File.WriteAllBytes(Path.Combine(CorpusOutput, stem + ".tif"), file);
-        manifest[stem + ".tif"] = Entry(image, compression == TiffCompression.Jpeg ? Decoded(image, CorpusOutput, stem) : null,
+        manifest[stem + ".tif"] = Entry(image, lossy ? Decoded(image, CorpusOutput, stem) : null,
             MetadataWriteTests.ExifReference(source.Metadata.Exif, CorpusOutput, stem));
+    }
+
+    /// <summary>Three pages: RGB, grey with alpha and black and white, with ICC and XMP on each.</summary>
+    private static Image Pages()
+    {
+        Image image = EncoderSupport.Pattern(33, 17);
+        using Image gray = EncoderSupport.Pattern(33, 17, gray: true, alpha: true);
+        using Image bilevel = EncoderSupport.Bilevel(33, 17);
+        image.Frames.AddClone(gray.Frames[0]);
+        image.Frames.AddClone(bilevel.Frames[0]);
+        image.Metadata.IccProfile = [.. Enumerable.Range(0, 77).Select(i => (byte)(i * 3))];
+        image.Metadata.Xmp = Encoding.UTF8.GetBytes("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"/>");
+        return image;
     }
 
     private static bool Lossy(TiffEncoderOptions options) =>

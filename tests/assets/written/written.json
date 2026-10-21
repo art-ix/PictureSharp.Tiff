@@ -649,6 +649,205 @@
     "icc": null,
     "xmp": null
   },
+  "rgb_70x41_lzw_tiles16.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 70,
+    "height": 41,
+    "sha256": "7772b5b0a83869cd6ccd9e3ac4628634067b62cf28494276c5d94f255dcb9c0f",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_alpha_33x17_tiles16.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 33,
+    "height": 17,
+    "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "palette_40x30_packbits_tiles32.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 40,
+    "height": 30,
+    "sha256": "9ddadb89ecd88ff7b33ec51dffb40a01007c74e1916b730d2a6fc00d25178ca8",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "bw_noise_61x40_g4_tiles16.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 61,
+    "height": 40,
+    "sha256": "9fd796a6e5e5aef1498de27a7c5a4012fd0c2342105e567431baaa4d87b17836",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgba_70x41_deflate_tiles32.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 70,
+    "height": 41,
+    "sha256": "3f7fde09c5f00816a8c34f97354917f6d422fd860f72df6b65dc8b0bff62a1c2",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "jpeg_rgb_70x41_tiles32.tif": {
+    "decoded": "jpeg_rgb_70x41_tiles32.decoded.png",
+    "exif": null,
+    "width": 70,
+    "height": 41,
+    "sha256": "908bd0eb4c4257f22b27546bbe2daefd385b20cfdd637e78083c81a74a5d6eda",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "webp_rgba_lossless_70x41_tiles32.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 70,
+    "height": 41,
+    "sha256": "3f7fde09c5f00816a8c34f97354917f6d422fd860f72df6b65dc8b0bff62a1c2",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_bigtiff_33x17_lzw_rows5.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 33,
+    "height": 17,
+    "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_exif_bigtiff_70x41_tiles16.tif": {
+    "decoded": null,
+    "exif": "gray_exif_bigtiff_70x41_tiles16.exif.jpg",
+    "width": 70,
+    "height": 41,
+    "sha256": "cf74b0768986092d63b3f7324f092315e80509315e1a1919213d03c01d063e67",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "pages3_33x17_lzw.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 33,
+    "height": 17,
+    "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+    "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0",
+    "pages": [
+      {
+        "decoded": null,
+        "exif": null,
+        "width": 33,
+        "height": 17,
+        "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
+        "dpi": [
+          96,
+          96
+        ],
+        "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+        "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0"
+      },
+      {
+        "decoded": null,
+        "exif": null,
+        "width": 33,
+        "height": 17,
+        "sha256": "6fc0a0e22d24aa79eca18c614bc7493a669083374955ade556343aed6fcba24d",
+        "dpi": [
+          96,
+          96
+        ],
+        "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+        "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0"
+      }
+    ]
+  },
+  "pages3_bigtiff_33x17_tiles16.tif": {
+    "decoded": null,
+    "exif": null,
+    "width": 33,
+    "height": 17,
+    "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+    "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0",
+    "pages": [
+      {
+        "decoded": null,
+        "exif": null,
+        "width": 33,
+        "height": 17,
+        "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
+        "dpi": [
+          96,
+          96
+        ],
+        "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+        "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0"
+      },
+      {
+        "decoded": null,
+        "exif": null,
+        "width": 33,
+        "height": 17,
+        "sha256": "6fc0a0e22d24aa79eca18c614bc7493a669083374955ade556343aed6fcba24d",
+        "dpi": [
+          96,
+          96
+        ],
+        "icc": "4586ba769ae91d6f0a702a905e2938320453c5c1a0f5f019f4e30f81a2c7ac15",
+        "xmp": "0e29edf4199515fa4c60273bdc39851d2fbc402ebfb95b4e68a2754f5ba6d9e0"
+      }
+    ]
+  },
   "gray_7x3_deflate_level0.tif": {
     "decoded": null,
     "exif": null,

@@ -1,5 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using PictureSharp.Formats.Jpeg;
 using PictureSharp.Formats.Tiff.Codecs;
@@ -9,9 +11,10 @@ using PictureSharp.Formats.WebP;
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// Writes the first frame as a little-endian classic TIFF: the header, the strips (each packed, differenced and
-/// compressed in turn), then the IFD. A seekable stream gets
-/// the header's IFD offset patched after the data; any other stream gets the strips spooled first, with the same bytes.
+/// Writes each frame as a page of a little-endian classic TIFF or BigTIFF: the header, the strips or tiles of every page
+/// (each packed, differenced and compressed, possibly in parallel, and written in order), then the IFDs of all pages,
+/// linked in page order. A seekable stream gets the header's IFD offset patched after the data; any other stream gets
+/// the data spooled first, with the same bytes.
 /// </summary>
 internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 {
@@ -26,6 +29,9 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private const ushort PredictorHorizontal = 2;
     private const int PaletteMinPixels = 768;
     private const ushort UnassociatedAlpha = 2;
+    private const uint SubfilePage = 2;
+    // Chunks compressed per parallel batch, per thread: enough to keep threads busy, few enough to bound the memory.
+    private const int BatchPerThread = 4;
 
     public static TiffEncoder Instance { get; } = new();
 
@@ -39,7 +45,96 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new ArgumentException("The stream must be writable.", nameof(output));
         }
 
+        Validate(image, options);
+        int pageCount = options.SaveAllPages ? image.FrameCount : 1;
+        var pages = new Page[pageCount];
+        for (int i = 0; i < pageCount; i++)
+        {
+            pages[i] = Plan(image, image.Frames[i], options, pageCount > 1 ? i : -1, pageCount);
+        }
+
+        // The IFD sizes do not depend on the offsets, so the size of uncompressed output is known before any output;
+        // compressed chunks are checked against classic TIFF's 4 GiB as they are written.
+        long classicIfds = pages.Sum(page => Ifd(image, page, bigTiff: false).Size);
+        long uncompressed = pages.Sum(page => page.UncompressedBytes);
+        bool bigTiff = options.Container == TiffContainer.BigTiff
+            || (options.Container == TiffContainer.Auto && Align(8 + uncompressed) + classicIfds > uint.MaxValue);
+        long ifdBytes = bigTiff ? pages.Sum(page => Ifd(image, page, bigTiff: true).Size) : classicIfds;
+        if (pages.Any(page => page.Bound > Array.MaxLength)
+            || (!bigTiff && options.Compression == TiffCompression.None && Align(8 + uncompressed) + ifdBytes > uint.MaxValue))
+        {
+            throw TooLarge();
+        }
+
+        bool seekable = output.CanSeek;
+        long start = seekable ? output.Position : 0;
+        using TiffSpool? spool = seekable ? null : new TiffSpool();
+        if (seekable)
+        {
+            output.Write(Header(0, bigTiff));
+        }
+
+        var sink = new Sink(output, spool, bigTiff ? 16 : 8, bigTiff ? long.MaxValue : uint.MaxValue - ifdBytes);
+        int degree = options.MaxDegreeOfParallelism == -1 ? Environment.ProcessorCount : options.MaxDegreeOfParallelism;
+        foreach (Page page in pages)
+        {
+            EncodeChunks(page, options, degree, sink, cancellationToken);
+        }
+
+        var ifdOffsets = new ulong[pageCount];
+        long position = Align(sink.Position);
+        var ifds = new TiffIfdWriter[pageCount];
+        for (int i = 0; i < pageCount; i++)
+        {
+            ifds[i] = Ifd(image, pages[i], bigTiff);
+            ifdOffsets[i] = (ulong)position;
+            position += ifds[i].Size;
+        }
+
+        if (spool is not null)
+        {
+            output.Write(Header(ifdOffsets[0], bigTiff));
+            spool.CopyTo(output);
+        }
+
+        if (Align(sink.Position) != sink.Position)
+        {
+            output.WriteByte(0);
+        }
+
+        for (int i = 0; i < pageCount; i++)
+        {
+            output.Write(ifds[i].ToArray(ifdOffsets[i], i + 1 < pageCount ? ifdOffsets[i + 1] : 0));
+        }
+
+        if (seekable)
+        {
+            long end = output.Position;
+            output.Position = start + (bigTiff ? 8 : 4);
+            Span<byte> link = stackalloc byte[8];
+            if (bigTiff)
+            {
+                BinaryPrimitives.WriteUInt64LittleEndian(link, ifdOffsets[0]);
+            }
+            else
+            {
+                BinaryPrimitives.WriteUInt32LittleEndian(link, (uint)ifdOffsets[0]);
+            }
+
+            output.Write(link[..(bigTiff ? 8 : 4)]);
+            output.Position = end;
+        }
+    }
+
+    private static void Validate(Image image, TiffEncoderOptions options)
+    {
         TiffCompression compression = options.Compression;
+        bool tiled = options.TileSize > 0;
+        if (tiled && options.RowsPerStrip > 0)
+        {
+            throw new ArgumentException("Rows per strip and the tile size cannot both be set.", nameof(options));
+        }
+
         if (options.Predictor == TiffPredictor.Horizontal && compression is not (TiffCompression.Lzw or TiffCompression.Deflate))
         {
             throw new ArgumentException("The horizontal predictor applies only to LZW and Deflate compression.", nameof(options));
@@ -55,7 +150,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new ArgumentException("JPEG compression writes only greyscale or RGB images, without alpha.", nameof(options));
         }
 
-        if (compression == TiffCompression.Jpeg && image.Width > JpegMaxWidth)
+        if (compression == TiffCompression.Jpeg && (tiled ? options.TileSize : image.Width) > JpegMaxWidth)
         {
             throw new NotSupportedException($"JPEG compression supports widths up to {JpegMaxWidth}.");
         }
@@ -65,17 +160,22 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             throw new ArgumentException("WebP compression writes only RGB or RGBA images.", nameof(options));
         }
 
-        if (compression == TiffCompression.WebP && image.Width > TiffWebP.MaxSide)
+        if (compression == TiffCompression.WebP && (tiled ? options.TileSize : image.Width) > TiffWebP.MaxSide)
         {
-            throw new NotSupportedException($"WebP compression supports widths up to {TiffWebP.MaxSide}.");
+            throw new NotSupportedException($"WebP compression supports {(tiled ? "tiles" : "widths")} up to {TiffWebP.MaxSide}.");
         }
 
         if (options.Predictor == TiffPredictor.Horizontal && options.ColorType == TiffColorType.BlackWhite)
         {
             throw new ArgumentException("The horizontal predictor applies only to 8-bit samples, not black and white.", nameof(options));
         }
+    }
 
-        ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan();
+    /// <summary>The colour type, palette and chunk layout of one page; <paramref name="index"/> is -1 for a single page.</summary>
+    private static Page Plan(Image image, ImageFrame frame, TiffEncoderOptions options, int index, int count)
+    {
+        TiffCompression compression = options.Compression;
+        ReadOnlySpan<Rgba32> pixels = frame.GetPixelSpan();
         Dictionary<uint, byte>? palette = null;
         TiffColorType colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
             : compression == TiffCompression.CcittGroup4 ? TiffColorType.BlackWhite
@@ -99,172 +199,110 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             || (options.Predictor == TiffPredictor.Auto && compression is TiffCompression.Lzw or TiffCompression.Deflate
                 && colorType is not (TiffColorType.Palette or TiffColorType.BlackWhite));
 
-        int width = image.Width, height = image.Height;
-        long rowBytes = colorType == TiffColorType.BlackWhite ? (width + 7L) / 8 : (long)width * samplesPerPixel;
-        // JPEG strips other than the last hold whole MCU rows (libtiff requires it).
-        int block = compression != TiffCompression.Jpeg ? 1
-            : colorType == TiffColorType.Rgb && options.JpegSubsampling is JpegSubsampling.Ratio420 or JpegSubsampling.Ratio440 ? 16
-            : 8;
-        int rowsPerStrip = options.RowsPerStrip > 0
-            ? (int)Math.Min((options.RowsPerStrip + (long)block - 1) / block * block, height)
-            : (int)Math.Min(Math.Max(StripTarget / rowBytes / block, 1) * block, height);
-        if (compression == TiffCompression.WebP)
+        int width = frame.Width, height = frame.Height;
+        bool tiled = options.TileSize > 0;
+        int chunkWidth = tiled ? options.TileSize : width;
+        long rowBytes = colorType == TiffColorType.BlackWhite ? (chunkWidth + 7L) / 8 : (long)chunkWidth * samplesPerPixel;
+        int chunkHeight;
+        if (tiled)
         {
-            rowsPerStrip = Math.Min(rowsPerStrip, TiffWebP.MaxSide);
+            chunkHeight = options.TileSize;
+        }
+        else
+        {
+            // JPEG strips other than the last hold whole MCU rows (libtiff requires it).
+            int block = compression != TiffCompression.Jpeg ? 1
+                : colorType == TiffColorType.Rgb && options.JpegSubsampling is JpegSubsampling.Ratio420 or JpegSubsampling.Ratio440 ? 16
+                : 8;
+            chunkHeight = options.RowsPerStrip > 0
+                ? (int)Math.Min((options.RowsPerStrip + (long)block - 1) / block * block, height)
+                : (int)Math.Min(Math.Max(StripTarget / rowBytes / block, 1) * block, height);
+            if (compression == TiffCompression.WebP)
+            {
+                chunkHeight = Math.Min(chunkHeight, TiffWebP.MaxSide);
+            }
         }
 
-        int strips = (int)(((long)height + rowsPerStrip - 1) / rowsPerStrip);
-        var offsets = new uint[strips];
-        var counts = new uint[strips];
-        var layout = new Layout(colorType, samplesPerPixel, compression, horizontal, rowsPerStrip, options.JpegSubsampling, palette,
+        return new Page(frame, colorType, samplesPerPixel, compression, horizontal, tiled, chunkWidth, chunkHeight, rowBytes,
+            options.JpegSubsampling, palette, index, count,
             (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null,
             (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null,
             (options.Metadata & MetadataKinds.Exif) != 0 ? image.Metadata.Exif : null);
+    }
 
-        // Classic TIFF addresses 4 GiB. The IFD size does not depend on the offsets, so uncompressed output is checked
-        // before any output; compressed strips are checked as they are written.
-        long stripBytes = rowBytes * rowsPerStrip;
-        long bound = compression switch
+    /// <summary>
+    /// Compresses the chunks of a page and writes them in order: one at a time, or in batches compressed in parallel,
+    /// each thread with its own <see cref="ChunkEncoder"/>, so the bytes do not depend on <paramref name="degree"/>.
+    /// </summary>
+    private static void EncodeChunks(Page page, TiffEncoderOptions options, int degree, Sink sink, CancellationToken cancellationToken)
+    {
+        degree = Math.Min(degree, page.Chunks);
+        if (degree <= 1)
         {
-            TiffCompression.PackBits => PackBitsEncoder.MaxLength(stripBytes),
-            TiffCompression.Lzw => LzwEncoder.MaxLength(stripBytes),
-            _ => stripBytes,
-        };
-        long ifdSize = Ifd(image, layout, offsets, counts).Size;
-        if (bound > Array.MaxLength
-            || (compression == TiffCompression.None && Align(8 + (rowBytes * height)) + ifdSize > uint.MaxValue))
-        {
-            throw new NotSupportedException("The TIFF file would exceed 4 GiB, which classic TIFF cannot address.");
-        }
-
-        bool seekable = output.CanSeek;
-        long start = seekable ? output.Position : 0;
-        using TiffSpool? spool = seekable ? null : new TiffSpool();
-        if (seekable)
-        {
-            output.Write(Header(0));
-        }
-
-        byte[] strip = ArrayPool<byte>.Shared.Rent((int)stripBytes);
-        byte[]? packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)bound) : null;
-        LzwEncoder? lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
-        Fax4Encoder? fax4 = compression == TiffCompression.CcittGroup4 ? new Fax4Encoder() : null;
-        using MemoryStream? jpeg = compression == TiffCompression.Jpeg ? new MemoryStream() : null;
-        JpegEncoderOptions? jpegOptions = jpeg is null ? null : new JpegEncoderOptions
-        {
-            Quality = options.JpegQuality,
-            // A single component must have sampling factors 1x1, which libtiff checks (JPEGPreDecode).
-            Subsampling = colorType == TiffColorType.Grayscale ? JpegSubsampling.Ratio444 : options.JpegSubsampling,
-            ColorMode = colorType == TiffColorType.Grayscale ? JpegColorMode.Grayscale : JpegColorMode.Color,
-            Metadata = MetadataKinds.None,
-            Configuration = options.Configuration,
-        };
-        // port: libtiff/tif_webp.c TWebPSetupEncode: the default preset at the given quality; lossless keeps the colour
-        // under transparent pixels (libtiff leaves that to libwebp's default).
-        WebPEncoderOptions? webpOptions = compression != TiffCompression.WebP ? null : new WebPEncoderOptions
-        {
-            Quality = options.WebPQuality,
-            Lossless = options.WebPLossless,
-            Exact = options.WebPLossless,
-            Metadata = MetadataKinds.None,
-            Configuration = options.Configuration,
-        };
-        using MemoryStream? webp = webpOptions is null ? null : new MemoryStream();
-        using DeflateEncoder? deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
-        long position = 8;
-        try
-        {
-            for (int s = 0; s < strips; s++)
+            using var encoder = new ChunkEncoder(page, options, options.MaxDegreeOfParallelism);
+            for (int c = 0; c < page.Chunks; c++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int y0 = s * rowsPerStrip, rows = Math.Min(rowsPerStrip, height - y0);
-                Span<byte> samples = strip.AsSpan(0, (int)(rows * rowBytes));
-                for (int y = 0; y < (jpeg is null && webp is null ? rows : 0); y++)
+                sink.Write(page, c, encoder.Encode(c, cancellationToken));
+            }
+
+            return;
+        }
+
+        var encoders = new ConcurrentBag<ChunkEncoder>();
+        var results = new (byte[]? Data, int Length)[degree * BatchPerThread];
+        var parallel = new ParallelOptions { MaxDegreeOfParallelism = degree, CancellationToken = cancellationToken };
+        try
+        {
+            for (int first = 0; first < page.Chunks; first += results.Length)
+            {
+                int batch = Math.Min(results.Length, page.Chunks - first);
+                try
                 {
-                    ReadOnlySpan<Rgba32> row = pixels.Slice((y0 + y) * width, width);
-                    Span<byte> target = samples.Slice((int)(y * rowBytes), (int)rowBytes);
-                    if (palette is not null)
-                    {
-                        TiffSamplePacker.PackIndices(row, target, palette);
-                    }
-                    else if (colorType == TiffColorType.BlackWhite)
-                    {
-                        TiffSamplePacker.PackBlackWhite(row, target);
-                    }
-                    else
-                    {
-                        TiffSamplePacker.Pack(row, target, samplesPerPixel);
-                    }
+                    Parallel.For(0, batch, parallel,
+                        () => encoders.TryTake(out ChunkEncoder? encoder) ? encoder : new ChunkEncoder(page, options, 1),
+                        (i, _, encoder) =>
+                        {
+                            ReadOnlySpan<byte> data = encoder.Encode(first + i, cancellationToken);
+                            byte[] copy = ArrayPool<byte>.Shared.Rent(data.Length);
+                            data.CopyTo(copy);
+                            results[i] = (copy, data.Length);
+                            return encoder;
+                        },
+                        encoders.Add);
+                }
+                catch (AggregateException e) when (e.InnerExceptions.Count == 1)
+                {
+                    ExceptionDispatchInfo.Throw(e.InnerExceptions[0]);
                 }
 
-                if (horizontal)
+                for (int i = 0; i < batch; i++)
                 {
-                    HorizontalPredictor.Encode8(samples, (int)rowBytes, samplesPerPixel);
+                    sink.Write(page, first + i, results[i].Data.AsSpan(0, results[i].Length));
+                    ArrayPool<byte>.Shared.Return(results[i].Data!);
+                    results[i] = default;
                 }
-
-                ReadOnlySpan<byte> data = compression switch
-                {
-                    TiffCompression.PackBits => packed.AsSpan(0, PackBitsEncoder.Encode(samples, (int)rowBytes, packed)),
-                    TiffCompression.Lzw => packed.AsSpan(0, lzw!.Encode(samples, packed)),
-                    TiffCompression.Deflate => deflate!.Encode(samples),
-                    TiffCompression.CcittGroup4 => fax4!.Encode(samples, (int)rowBytes, width),
-                    TiffCompression.Jpeg => EncodePart(pixels.Slice(y0 * width, rows * width), width, rows, alpha: false, jpeg!, jpegOptions!, cancellationToken),
-                    TiffCompression.WebP => EncodePart(pixels.Slice(y0 * width, rows * width), width, rows, colorType == TiffColorType.Rgba, webp!,
-                        webpOptions!, cancellationToken),
-                    _ => samples,
-                };
-                if (Align(position + data.Length) + ifdSize > uint.MaxValue)
-                {
-                    throw new NotSupportedException("The TIFF file would exceed 4 GiB, which classic TIFF cannot address.");
-                }
-
-                if (spool is null)
-                {
-                    output.Write(data);
-                }
-                else
-                {
-                    spool.Write(data);
-                }
-
-                offsets[s] = (uint)position;
-                counts[s] = (uint)data.Length;
-                position += data.Length;
             }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(strip);
-            if (packed is not null)
+            foreach ((byte[]? data, _) in results)
             {
-                ArrayPool<byte>.Shared.Return(packed);
+                if (data is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(data);
+                }
+            }
+
+            foreach (ChunkEncoder encoder in encoders)
+            {
+                encoder.Dispose();
             }
         }
-
-        uint ifdOffset = (uint)Align(position);
-        byte[] ifd = Ifd(image, layout, offsets, counts).ToArray(ifdOffset);
-        if (spool is not null)
-        {
-            output.Write(Header(ifdOffset));
-            spool.CopyTo(output);
-        }
-
-        if (ifdOffset != position)
-        {
-            output.WriteByte(0);
-        }
-
-        output.Write(ifd);
-        if (seekable)
-        {
-            long end = output.Position;
-            output.Position = start + 4;
-            Span<byte> link = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32LittleEndian(link, ifdOffset);
-            output.Write(link);
-            output.Position = end;
-        }
     }
+
+    private static NotSupportedException TooLarge() =>
+        new("The TIFF file would exceed 4 GiB, which classic TIFF cannot address; use TiffContainer.BigTiff.");
 
     /// <summary>
     /// The smallest lossless type: black and white when <paramref name="bilevel"/> allows it and every pixel is opaque
@@ -330,41 +368,16 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         return true;
     }
 
-    /// <summary>
-    /// One strip as a complete JPEG or WebP stream. Without <paramref name="alpha"/>, alpha is dropped rather than
-    /// composited, as for the other compressions; for JPEG the colour mode is fixed so that a grey strip of a colour image
-    /// still has the three components the IFD declares.
-    /// </summary>
-    // port: libtiff/tif_jpeg.c JPEGSetupEncode and JPEGEncode write one interchange stream per strip when no JPEGTables
-    // are shared; libtiff itself shares the tables, which TTN2 leaves optional. libtiff/tif_webp.c TWebPPostEncode
-    // encodes each strip as one WebP stream of the strip's own rows.
-    private static ReadOnlySpan<byte> EncodePart(ReadOnlySpan<Rgba32> pixels, int width, int rows, bool alpha, MemoryStream output,
-        EncoderOptions options, CancellationToken cancellationToken)
+    private static TiffIfdWriter Ifd(Image image, Page layout, bool bigTiff)
     {
-        using var part = new Image(width, rows);
-        Span<Rgba32> target = part.GetPixelSpan();
-        if (alpha)
+        var ifd = new TiffIfdWriter(bigTiff: bigTiff);
+        if (layout.Index >= 0)
         {
-            pixels.CopyTo(target);
-        }
-        else
-        {
-            for (int i = 0; i < target.Length; i++)
-            {
-                target[i] = pixels[i] with { A = 255 };
-            }
+            ifd.AddLong(TiffTag.NewSubfileType, SubfilePage);
         }
 
-        output.SetLength(0);
-        part.Save(output, options, cancellationToken);
-        return output.GetBuffer().AsSpan(0, (int)output.Length);
-    }
-
-    private static TiffIfdWriter Ifd(Image image, Layout layout, uint[] offsets, uint[] counts)
-    {
-        var ifd = new TiffIfdWriter();
-        ifd.AddLong(TiffTag.ImageWidth, (uint)image.Width);
-        ifd.AddLong(TiffTag.ImageLength, (uint)image.Height);
+        ifd.AddLong(TiffTag.ImageWidth, (uint)layout.Frame.Width);
+        ifd.AddLong(TiffTag.ImageLength, (uint)layout.Frame.Height);
         Span<ushort> bits = [8, 8, 8, 8];
         ifd.AddShort(TiffTag.BitsPerSample, layout.ColorType == TiffColorType.BlackWhite ? [1] : bits[..layout.SamplesPerPixel]);
         ifd.AddShort(TiffTag.Compression, layout.Compression switch
@@ -385,12 +398,28 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             TiffColorType.Rgb or TiffColorType.Rgba => PhotometricRgb,
             _ => PhotometricMinIsBlack,
         });
-        ifd.AddLong(TiffTag.StripOffsets, offsets);
         ifd.AddShort(TiffTag.SamplesPerPixel, (ushort)layout.SamplesPerPixel);
-        ifd.AddLong(TiffTag.RowsPerStrip, (uint)layout.RowsPerStrip);
-        ifd.AddLong(TiffTag.StripByteCounts, counts);
+        if (layout.Tiled)
+        {
+            ifd.AddLong(TiffTag.TileWidth, (uint)layout.ChunkWidth);
+            ifd.AddLong(TiffTag.TileLength, (uint)layout.ChunkHeight);
+            ifd.AddOffsets(TiffTag.TileOffsets, layout.Offsets);
+            ifd.AddOffsets(TiffTag.TileByteCounts, layout.Counts);
+        }
+        else
+        {
+            ifd.AddOffsets(TiffTag.StripOffsets, layout.Offsets);
+            ifd.AddLong(TiffTag.RowsPerStrip, (uint)layout.ChunkHeight);
+            ifd.AddOffsets(TiffTag.StripByteCounts, layout.Counts);
+        }
+
         ifd.AddResolution(image.Metadata.HorizontalResolution, image.Metadata.VerticalResolution);
         ifd.AddShort(TiffTag.PlanarConfiguration, 1);
+        if (layout.Index >= 0)
+        {
+            ifd.AddShort(TiffTag.PageNumber, (ushort)layout.Index, (ushort)layout.Count);
+        }
+
         ifd.AddAscii(TiffTag.Software, Software);
         if (layout.Horizontal)
         {
@@ -456,15 +485,257 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         return map;
     }
 
-    private static byte[] Header(uint ifdOffset)
+    private static byte[] Header(ulong ifdOffset, bool bigTiff)
     {
-        byte[] header = [(byte)'I', (byte)'I', 42, 0, 0, 0, 0, 0];
-        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), ifdOffset);
-        return header;
+        if (!bigTiff)
+        {
+            byte[] header = [(byte)'I', (byte)'I', 42, 0, 0, 0, 0, 0];
+            BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), (uint)ifdOffset);
+            return header;
+        }
+
+        // BigTIFF: version 43, 8-byte offsets, a reserved zero, then the first IFD offset.
+        byte[] big = [(byte)'I', (byte)'I', 43, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        BinaryPrimitives.WriteUInt64LittleEndian(big.AsSpan(8), ifdOffset);
+        return big;
     }
 
     private static long Align(long offset) => (offset + 1) & ~1L;
 
-    private sealed record Layout(TiffColorType ColorType, int SamplesPerPixel, TiffCompression Compression, bool Horizontal,
-        int RowsPerStrip, JpegSubsampling JpegSubsampling, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp, byte[]? Exif);
+    /// <summary>
+    /// One page: its frame, samples and chunk grid (strips are chunks as wide as the image), and the offsets and byte
+    /// counts of its chunks once written. <see cref="Index"/> is -1 when the file has one page.
+    /// </summary>
+    private sealed record Page(ImageFrame Frame, TiffColorType ColorType, int SamplesPerPixel, TiffCompression Compression,
+        bool Horizontal, bool Tiled, int ChunkWidth, int ChunkHeight, long RowBytes, JpegSubsampling JpegSubsampling,
+        Dictionary<uint, byte>? Palette, int Index, int Count, byte[]? Icc, byte[]? Xmp, byte[]? Exif)
+    {
+        public int Across => Tiled ? (Frame.Width + ChunkWidth - 1) / ChunkWidth : 1;
+
+        public int Chunks => Across * (int)(((long)Frame.Height + ChunkHeight - 1) / ChunkHeight);
+
+        public ulong[] Offsets => field ??= new ulong[Chunks];
+
+        public ulong[] Counts => field ??= new ulong[Chunks];
+
+        /// <summary>The samples of a full chunk.</summary>
+        public long ChunkBytes => RowBytes * ChunkHeight;
+
+        /// <summary>The largest compressed chunk.</summary>
+        public long Bound => Compression switch
+        {
+            TiffCompression.PackBits => PackBitsEncoder.MaxLength(ChunkBytes),
+            TiffCompression.Lzw => LzwEncoder.MaxLength(ChunkBytes),
+            _ => ChunkBytes,
+        };
+
+        /// <summary>The samples of every chunk; tiles are full at the edges, the last strip is not.</summary>
+        public long UncompressedBytes => Tiled ? ChunkBytes * Chunks : RowBytes * Frame.Height;
+
+        /// <summary>The position and visible size of chunk <paramref name="chunk"/>.</summary>
+        public (int X, int Y, int Width, int Rows) Region(int chunk)
+        {
+            int x = chunk % Across * ChunkWidth, y = chunk / Across * ChunkHeight;
+            return (x, y, Math.Min(ChunkWidth, Frame.Width - x), Math.Min(ChunkHeight, Frame.Height - y));
+        }
+    }
+
+    /// <summary>
+    /// The output after the header, written directly or spooled; it records each chunk's offset and byte count and fails
+    /// before a chunk would end past <paramref name="limit"/> (where the IFDs no longer fit classic TIFF).
+    /// </summary>
+    private sealed class Sink(Stream output, TiffSpool? spool, long position, long limit)
+    {
+        public long Position { get; private set; } = position;
+
+        public void Write(Page page, int chunk, ReadOnlySpan<byte> data)
+        {
+            if (Align(Position + data.Length) > limit)
+            {
+                throw TooLarge();
+            }
+
+            if (spool is null)
+            {
+                output.Write(data);
+            }
+            else
+            {
+                spool.Write(data);
+            }
+
+            page.Offsets[chunk] = (ulong)Position;
+            page.Counts[chunk] = (ulong)data.Length;
+            Position += data.Length;
+        }
+    }
+
+    /// <summary>
+    /// Packs, differences and compresses one chunk at a time with buffers and codec state of its own, so encoders on
+    /// different threads share nothing but the page's pixels. A tile past the image edge repeats the last column and row.
+    /// </summary>
+    private sealed class ChunkEncoder : IDisposable
+    {
+        private readonly Page _page;
+        private readonly byte[] _samples;
+        private readonly byte[]? _packed;
+        private readonly Rgba32[]? _row;
+        private readonly LzwEncoder? _lzw;
+        private readonly Fax4Encoder? _fax4;
+        private readonly DeflateEncoder? _deflate;
+        private readonly MemoryStream? _part;
+        private readonly EncoderOptions? _partOptions;
+
+        public ChunkEncoder(Page page, TiffEncoderOptions options, int partParallelism)
+        {
+            _page = page;
+            TiffCompression compression = page.Compression;
+            bool image = compression is TiffCompression.Jpeg or TiffCompression.WebP;
+            _samples = image ? [] : ArrayPool<byte>.Shared.Rent((int)page.ChunkBytes);
+            _packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)page.Bound) : null;
+            _row = page.Tiled && !image ? ArrayPool<Rgba32>.Shared.Rent(page.ChunkWidth) : null;
+            _lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
+            _fax4 = compression == TiffCompression.CcittGroup4 ? new Fax4Encoder() : null;
+            _deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
+            _part = image ? new MemoryStream() : null;
+            _partOptions = compression switch
+            {
+                TiffCompression.Jpeg => new JpegEncoderOptions
+                {
+                    Quality = options.JpegQuality,
+                    // A single component must have sampling factors 1x1, which libtiff checks (JPEGPreDecode).
+                    Subsampling = page.ColorType == TiffColorType.Grayscale ? JpegSubsampling.Ratio444 : options.JpegSubsampling,
+                    ColorMode = page.ColorType == TiffColorType.Grayscale ? JpegColorMode.Grayscale : JpegColorMode.Color,
+                    Metadata = MetadataKinds.None,
+                    MaxDegreeOfParallelism = partParallelism,
+                    Configuration = options.Configuration,
+                },
+                // port: libtiff/tif_webp.c TWebPSetupEncode: the default preset at the given quality; lossless keeps the
+                // colour under transparent pixels (libtiff leaves that to libwebp's default).
+                TiffCompression.WebP => new WebPEncoderOptions
+                {
+                    Quality = options.WebPQuality,
+                    Lossless = options.WebPLossless,
+                    Exact = options.WebPLossless,
+                    Metadata = MetadataKinds.None,
+                    MaxDegreeOfParallelism = partParallelism,
+                    Configuration = options.Configuration,
+                },
+                _ => null,
+            };
+        }
+
+        /// <summary>The compressed bytes of chunk <paramref name="chunk"/>, valid until the next call.</summary>
+        public ReadOnlySpan<byte> Encode(int chunk, CancellationToken cancellationToken)
+        {
+            Page page = _page;
+            (int x0, int y0, int width, int visibleRows) = page.Region(chunk);
+            // Tiles are always full; strips have their own rows.
+            int rows = page.Tiled ? page.ChunkHeight : visibleRows;
+            if (_part is not null)
+            {
+                return EncodePart(x0, y0, width, visibleRows, rows, cancellationToken);
+            }
+
+            int rowBytes = (int)page.RowBytes;
+            Span<byte> samples = _samples.AsSpan(0, rows * rowBytes);
+            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan();
+            for (int y = 0; y < rows; y++)
+            {
+                ReadOnlySpan<Rgba32> source = pixels.Slice((y0 + Math.Min(y, visibleRows - 1)) * page.Frame.Width + x0, width);
+                ReadOnlySpan<Rgba32> row = _row is null ? source : Pad(source, _row.AsSpan(0, page.ChunkWidth));
+                Span<byte> target = samples.Slice(y * rowBytes, rowBytes);
+                if (page.Palette is not null)
+                {
+                    TiffSamplePacker.PackIndices(row, target, page.Palette);
+                }
+                else if (page.ColorType == TiffColorType.BlackWhite)
+                {
+                    TiffSamplePacker.PackBlackWhite(row, target);
+                }
+                else
+                {
+                    TiffSamplePacker.Pack(row, target, page.SamplesPerPixel);
+                }
+            }
+
+            if (page.Horizontal)
+            {
+                HorizontalPredictor.Encode8(samples, rowBytes, page.SamplesPerPixel);
+            }
+
+            return page.Compression switch
+            {
+                TiffCompression.PackBits => _packed.AsSpan(0, PackBitsEncoder.Encode(samples, rowBytes, _packed)),
+                TiffCompression.Lzw => _packed.AsSpan(0, _lzw!.Encode(samples, _packed)),
+                TiffCompression.Deflate => _deflate!.Encode(samples),
+                TiffCompression.CcittGroup4 => _fax4!.Encode(samples, rowBytes, page.ChunkWidth),
+                _ => samples,
+            };
+        }
+
+        public void Dispose()
+        {
+            if (_samples.Length > 0)
+            {
+                ArrayPool<byte>.Shared.Return(_samples);
+            }
+
+            if (_packed is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_packed);
+            }
+
+            if (_row is not null)
+            {
+                ArrayPool<Rgba32>.Shared.Return(_row);
+            }
+
+            _deflate?.Dispose();
+            _part?.Dispose();
+        }
+
+        /// <summary>
+        /// One chunk as a complete JPEG or WebP stream of <paramref name="rows"/> rows. Without alpha (RGBA WebP),
+        /// alpha is dropped rather than composited, as for the other compressions; for JPEG the colour mode is fixed so
+        /// that a grey chunk of a colour image still has the three components the IFD declares.
+        /// </summary>
+        // port: libtiff/tif_jpeg.c JPEGSetupEncode and JPEGEncode write one interchange stream per strip or tile when no
+        // JPEGTables are shared; libtiff itself shares the tables, which TTN2 leaves optional. libtiff/tif_webp.c
+        // TWebPPostEncode encodes each strip or tile as one WebP stream of the chunk's own size.
+        private ReadOnlySpan<byte> EncodePart(int x0, int y0, int width, int visibleRows, int rows, CancellationToken cancellationToken)
+        {
+            Page page = _page;
+            bool alpha = page.ColorType == TiffColorType.Rgba;
+            int partWidth = page.Tiled ? page.ChunkWidth : width;
+            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan();
+            using var part = new Image(partWidth, rows);
+            Span<Rgba32> target = part.GetPixelSpan();
+            for (int y = 0; y < rows; y++)
+            {
+                ReadOnlySpan<Rgba32> source = pixels.Slice((y0 + Math.Min(y, visibleRows - 1)) * page.Frame.Width + x0, width);
+                Span<Rgba32> row = target.Slice(y * partWidth, partWidth);
+                Pad(source, row);
+                if (!alpha)
+                {
+                    for (int i = 0; i < row.Length; i++)
+                    {
+                        row[i].A = 255;
+                    }
+                }
+            }
+
+            _part!.SetLength(0);
+            part.Save(_part, _partOptions!, cancellationToken);
+            return _part.GetBuffer().AsSpan(0, (int)_part.Length);
+        }
+
+        /// <summary>Copies <paramref name="source"/> into <paramref name="row"/> and repeats its last pixel to the end.</summary>
+        private static ReadOnlySpan<Rgba32> Pad(ReadOnlySpan<Rgba32> source, Span<Rgba32> row)
+        {
+            source.CopyTo(row);
+            row[source.Length..].Fill(source[^1]);
+            return row;
+        }
+    }
 }
