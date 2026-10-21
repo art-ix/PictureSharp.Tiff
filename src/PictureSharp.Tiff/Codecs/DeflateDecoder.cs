@@ -14,8 +14,9 @@ internal static class DeflateDecoder
             using var zlib = new ZLibStream(new ReadOnlyMemoryStream(input), CompressionMode.Decompress);
             read = zlib.ReadAtLeast(output, output.Length, throwOnEndOfStream: false);
         }
-        catch (InvalidDataException e)
+        catch (Exception e) when (e is InvalidDataException or IOException)
         {
+            // Most corrupt streams throw InvalidDataException; zlib reports some as ZLibException, an IOException.
             throw new ImageFormatException(TiffFormat.Descriptor, "The TIFF Deflate data is corrupt.", e);
         }
 

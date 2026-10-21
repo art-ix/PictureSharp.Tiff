@@ -80,7 +80,7 @@ public sealed class RobustnessTests
         }
         catch (Exception e)
         {
-            unexpected.Add($"{data.Length} bytes: {e.GetType().Name}: {e.Message}\n{e.StackTrace}");
+            unexpected.Add($"{data.Length} bytes: {e}");
         }
     }
 }
