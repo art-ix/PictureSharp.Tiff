@@ -7,7 +7,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 
 **Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.5 (writer, compressions,
 EXIF and metadata editing, WebP) done locally; 0.5.0 part 1 (multi-page, tiles, BigTIFF, parallel compression) done
-locally. Next: 0.5.0 part 2 (benchmark, Native AOT, documentation) and the release with writing.**
+locally; part 2 (benchmark, Native AOT, documentation) done locally, VERSION 0.5.0. Next: the release (tag v0.5.0,
+NuGet, GitHub Release), on the user's go-ahead.**
 
 ## Versions
 
@@ -22,7 +23,7 @@ locally. Next: 0.5.0 part 2 (benchmark, Native AOT, documentation) and the relea
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Done, local |
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Done, local |
-| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Part 1 done, local |
+| 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Done, local; not released |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
@@ -309,6 +310,22 @@ Part 1 (multi-page, tiles, BigTIFF, parallel compression) done 2026-10-21. Decis
 - Frame-writer SPI: `ISequentialImageEncoder` (behind `Image.CreateFrameWriter`) is internal to the core, so a plugin
   cannot write pages one at a time; the encoder needs the whole `Image`. Not requested yet; a core request if users
   need page-by-page writing of large documents.
+
+Part 2 (benchmark, Native AOT, documentation) done 2026-10-21:
+- Benchmark: `benchmarks/PictureSharp.Tiff.Speed` (.NET, best of N, TSV) and `benchmarks/libtiff_speed.py` (libtiff
+  through ctypes with the same samples, rows per strip, predictor and Deflate level). 24 MP RGB photo
+  (`../PictureSharp/samples/iphone/IMG_8114.jpeg`), i5-12500H, 16 threads; table in the README. Writing: LZW 691 ms on
+  one thread against libtiff's 683 ms (same strips), 106 ms on 16; Deflate 2515 ms against 1159 ms, because Ubuntu's
+  libtiff 4.5.1 compresses whole strips with libdeflate while the runtime's zlib takes 2572 ms on the same strips by
+  itself (808 ms with libdeflate); 308 ms on 16 threads. Reading to RGBA (single-threaded decoder): None 98 / 45 ms,
+  LZW 428 / 268 ms, Deflate 406 / 148 ms against `TIFFReadRGBAImage`. Parallel strip decoding is a candidate for a
+  later version.
+- Native AOT: a consumer of the packed 0.5.0 package (`PublishAot`, `TreatWarningsAsErrors`, linux-x64) encodes every
+  compression in strips and tiles, classic and BigTIFF, with two pages, reads them back (pixels, page count, ICC) and
+  runs `EditMetadata`, with no trim or AOT warnings.
+- Documentation: README (reading and writing, example, performance), `docs/releases/release-0.5.0.md`,
+  `PackageReleaseNotes`, AGENTS.md; core README footnote ² changed to read and write (uncommitted in the core
+  repository).
 
 ## Core requests
 

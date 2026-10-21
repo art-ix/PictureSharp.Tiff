@@ -8,11 +8,11 @@
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <PackageId>PictureSharp.Tiff</PackageId>
     <Description>TIFF format plugin for PictureSharp, written entirely in C#. No native dependencies.</Description>
-    <PackageTags>picturesharp;image;tiff;tif;codec;decoder</PackageTags>
+    <PackageTags>picturesharp;image;tiff;tif;bigtiff;codec;decoder;encoder</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/art-ix/PictureSharp.Tiff</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.4.0: TiffDecoderOptions.Page selects a full-resolution page for Load, Identify and ReadMetadata. Includes 0.3.1: Image.ReadMetadata works for TIFF. Requires PictureSharp 0.7.8. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.4.0/docs/releases/release-0.4.0.md</PackageReleaseNotes>
+    <PackageReleaseNotes>0.5.0: writing TIFF and BigTIFF: every frame as a page, strips or tiles, None, PackBits, LZW, Deflate, JPEG, WebP and CCITT Group 4, compressed in parallel; Image.EditMetadata for TIFF; WebP compression is read. Requires PictureSharp 0.7.9. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.5.0/docs/releases/release-0.5.0.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

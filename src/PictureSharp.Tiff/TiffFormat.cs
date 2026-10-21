@@ -3,7 +3,7 @@ using PictureSharp.Formats.Tiff.Container;
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// The TIFF format plugin. It decodes one full-resolution page of a classic TIFF or BigTIFF file, the first unless
+/// The TIFF format plugin. It writes every frame as a page (see <see cref="TiffEncoderOptions"/>) and decodes one full-resolution page of a classic TIFF or BigTIFF file, the first unless
 /// <see cref="TiffDecoderOptions"/> selects another: strips or tiles, contiguous or planar samples, no
 /// compression, PackBits, LZW or Deflate with predictor 2 or 3, JPEG and WebP (through the configuration's JPEG and WebP
 /// codecs) and CCITT RLE, Group 3 and Group 4; greyscale (1-16 bits), palette (1-8 bits), RGB and CMYK (8 or 16 bits), YCbCr (8 bits,
@@ -40,7 +40,7 @@ public sealed class TiffFormat : IImageFormatModule
     /// <inheritdoc/>
     public IImageFormatDecoder Decoder => TiffDecoder.Instance;
 
-    /// <summary>Writes the first frame as described on <see cref="TiffEncoderOptions"/>.</summary>
+    /// <summary>Writes every frame as a page, as described on <see cref="TiffEncoderOptions"/>.</summary>
     public IImageFormatEncoder Encoder => TiffEncoder.Instance;
 
     /// <summary>

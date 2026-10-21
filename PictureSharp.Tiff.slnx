@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/PictureSharp.Tiff.Speed/PictureSharp.Tiff.Speed.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/PictureSharp.Tiff/PictureSharp.Tiff.csproj" />
   </Folder>

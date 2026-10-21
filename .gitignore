@@ -23,3 +23,6 @@ artifacts/
 # Python script caches
 __pycache__/
 *.pyc
+
+# Local sample images (not committed)
+samples/
