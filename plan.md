@@ -410,7 +410,10 @@ Fast paths and row bands done 2026-10-21 (uncommitted):
 - **Benchmark** (24 MP RGB, 1 / 16 threads): None 25 / 10 ms, LZW 363 / 46 ms, Deflate 338 / 39 ms; libtiff 45 / 268 /
   148 ms. All targets met. One strip: None 52 / 11 ms, LZW 364 / 307 ms, Deflate 342 / 286 ms (decompression stays
   serial). `samples/IMG_20200214_0049.tif` (12 MP grey, 4-row strips): 116 ms in 0.5.0, now 17 / 5 ms.
-- Left: release steps (VERSION 0.5.1, release notes, `PackageReleaseNotes`), after the user's approval.
+- Release prepared (uncommitted): VERSION 0.5.1, `docs/releases/release-0.5.1.md`, `PackageReleaseNotes`. Native AOT
+  consumer of the packed 0.5.1 package (local feed): the 28 write combinations, `EditMetadata`, and decoding at 1 and
+  -1 threads (None, LZW, Deflate; many strips and one strip, pixels equal) pass without trim or AOT warnings.
+- Left: tag v0.5.1, push, NuGet and GitHub Release, after the user's approval.
 
 ### 0.5.2 — parallel writing
 
@@ -432,6 +435,28 @@ sequential, and the candidates:
 - Deflate on one thread stays limited by the runtime's zlib (libtiff uses libdeflate); not part of this milestone.
 - DoD: every snapshot in `tests/assets/written/` byte-identical; output identical for every degree (existing tests);
   benchmark rerun and documented.
+
+Gate profiled 2026-10-21 (temporary Stopwatch counters in `TiffEncoder`, removed again; 24 MP RGB photo, i5-12500H,
+16 threads, best of 5). "Parallel" is the wall time inside the batch loops, "ideal" the summed chunk time / 16:
+
+| Case | 1 thread | 16 threads | Parallel / ideal | Analysis (`Plan`) |
+| --- | ---: | ---: | ---: | ---: |
+| LZW, RGB | 686 ms | 117 ms | 98 / 67 ms | — |
+| LZW, Auto (default) | 716 ms | 132 ms | 93 / 67 ms | 30 ms |
+| Deflate, RGB | 2519 ms | 324 ms | 315 / 261 ms | — |
+| Deflate, Auto | 2578 ms | 363 ms | 324 / 263 ms | 31 ms |
+| None, RGB / Auto | 33 / 62 ms | 44 / 55 ms | 8 / 2 ms | 29 ms |
+| 160 pages of 256 x 256, LZW | 323 ms | 152 ms | 130 / 20 ms | 15 ms |
+| 160 pages of 256 x 256, Deflate | 1184 ms | 506 ms | 472 / 79 ms | 16 ms |
+
+- Batch barrier: about 30 ms of 117 (LZW) and 55 ms of 324 (Deflate) is waiting, 17–26 %: above the gate.
+- Automatic colour type: `Choose` scans the whole frame on one thread, about 30 ms per 24 MP, 22 % of the default LZW
+  save and 8 % of Deflate: above the gate.
+- Pages: a 256 x 256 RGB page has 3 strips, so 13 of 16 threads idle; 2.1× (LZW) and 2.3× (Deflate) on 16 threads
+  where the chunk work alone would allow about 6×: far above the gate.
+- Also seen: None is slower on 16 threads than on one (44 against 33 ms; copying is memory-bound); encode it on one
+  thread unless profiling of the pipeline says otherwise.
+- All three parts pass the gate; 0.5.2 goes ahead when the user decides.
 
 ### 0.5.3–0.6.0 — reading gaps
 

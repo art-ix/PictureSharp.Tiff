@@ -79,8 +79,8 @@ within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy incl
   The automatic degree decodes images under 262,144 pixels on one thread; an explicit degree is used as given. The
   thread count is also capped at the number of strips or tiles and so that the threads' buffers stay within the size
   of the image. An image in a single strip or tile is decompressed on one thread, then un-predicted and converted in
-  parallel row bands (except packed YCbCr). Pixels, and the exception a corrupt file throws (the one of its first failing strip or tile), are the
-  same for every degree.
+  parallel row bands (except packed YCbCr). Pixels, and the exception a corrupt file throws (the one of its first
+  failing strip or tile), are the same for every degree.
 
 ## Errors
 
