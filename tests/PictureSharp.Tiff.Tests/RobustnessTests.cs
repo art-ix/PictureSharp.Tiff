@@ -75,6 +75,7 @@ public sealed class RobustnessTests
             using Image image = Image.Load(data, TestSupport.Options);
             _ = Image.Identify(data, TestSupport.Options);
             _ = Image.ReadMetadata(data, TestSupport.Options);
+            _ = Image.EditMetadata(data, metadata => metadata.Xmp = [60, 47, 62], TestSupport.Options);
         }
         catch (Exception e) when (e is ImageFormatException or NotSupportedException)
         {

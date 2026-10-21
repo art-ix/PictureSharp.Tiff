@@ -25,7 +25,6 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
     private const ushort PredictorHorizontal = 2;
     private const int PaletteMinPixels = 768;
     private const ushort UnassociatedAlpha = 2;
-    private const ushort ResolutionUnitInch = 2;
 
     public static TiffEncoder Instance { get; } = new();
 
@@ -102,7 +101,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         var counts = new uint[strips];
         var layout = new Layout(colorType, samplesPerPixel, compression, horizontal, rowsPerStrip, options.JpegSubsampling, palette,
             (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null,
-            (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null);
+            (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null,
+            (options.Metadata & MetadataKinds.Exif) != 0 ? image.Metadata.Exif : null);
 
         // Classic TIFF addresses 4 GiB. The IFD size does not depend on the offsets, so uncompressed output is checked
         // before any output; compressed strips are checked as they are written.
@@ -113,7 +113,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             TiffCompression.Lzw => LzwEncoder.MaxLength(stripBytes),
             _ => stripBytes,
         };
-        int ifdSize = Ifd(image, layout, offsets, counts).Size;
+        long ifdSize = Ifd(image, layout, offsets, counts).Size;
         if (bound > Array.MaxLength
             || (compression == TiffCompression.None && Align(8 + (rowBytes * height)) + ifdSize > uint.MaxValue))
         {
@@ -335,12 +335,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         ifd.AddShort(TiffTag.SamplesPerPixel, (ushort)layout.SamplesPerPixel);
         ifd.AddLong(TiffTag.RowsPerStrip, (uint)layout.RowsPerStrip);
         ifd.AddLong(TiffTag.StripByteCounts, counts);
-        (uint x, uint xDenominator) = Rational(image.Metadata.HorizontalResolution);
-        (uint y, uint yDenominator) = Rational(image.Metadata.VerticalResolution);
-        ifd.AddRational(TiffTag.XResolution, x, xDenominator);
-        ifd.AddRational(TiffTag.YResolution, y, yDenominator);
+        ifd.AddResolution(image.Metadata.HorizontalResolution, image.Metadata.VerticalResolution);
         ifd.AddShort(TiffTag.PlanarConfiguration, 1);
-        ifd.AddShort(TiffTag.ResolutionUnit, ResolutionUnitInch);
         ifd.AddAscii(TiffTag.Software, Software);
         if (layout.Horizontal)
         {
@@ -382,6 +378,12 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             ifd.AddBytes(TiffTag.IccProfile, TiffEntry.Undefined, layout.Icc);
         }
 
+        if (layout.Exif is { Length: > 0 })
+        {
+            // Software names this encoder, not the program the block came from.
+            TiffExifWriter.AddTo(ifd, layout.Exif, software: false);
+        }
+
         return ifd;
     }
 
@@ -407,33 +409,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         return header;
     }
 
-    /// <summary>
-    /// The resolution as a rational that reads back as the same <see cref="float"/>: the smallest power-of-ten
-    /// denominator up to 10⁶ that is exact, or the finest one that fits.
-    /// </summary>
-    private static (uint Numerator, uint Denominator) Rational(float value)
-    {
-        (uint, uint) best = ((uint)Math.Min(Math.Round((double)value), uint.MaxValue), 1);
-        for (uint denominator = 1; denominator <= 1_000_000; denominator *= 10)
-        {
-            double numerator = Math.Round(value * (double)denominator);
-            if (numerator > uint.MaxValue)
-            {
-                break;
-            }
-
-            best = ((uint)numerator, denominator);
-            if ((float)(numerator / denominator) == value)
-            {
-                break;
-            }
-        }
-
-        return best;
-    }
-
     private static long Align(long offset) => (offset + 1) & ~1L;
 
     private sealed record Layout(TiffColorType ColorType, int SamplesPerPixel, TiffCompression Compression, bool Horizontal,
-        int RowsPerStrip, JpegSubsampling JpegSubsampling, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp);
+        int RowsPerStrip, JpegSubsampling JpegSubsampling, Dictionary<uint, byte>? Palette, byte[]? Icc, byte[]? Xmp, byte[]? Exif);
 }

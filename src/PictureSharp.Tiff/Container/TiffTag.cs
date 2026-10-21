@@ -37,5 +37,8 @@ internal static class TiffTag
     public const ushort YCbCrSubsampling = 530;
     public const ushort ReferenceBlackWhite = 532;
     public const ushort Xmp = 700;
+    public const ushort ExifIfd = 34665;
     public const ushort IccProfile = 34675;
+    public const ushort GpsIfd = 34853;
+    public const ushort InteropIfd = 40965;
 }

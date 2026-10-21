@@ -9,19 +9,22 @@ namespace PictureSharp.Formats.Tiff.Container;
 /// </summary>
 internal static class TiffExifBuilder
 {
-    private const ushort ExifIfd = 34665;
-    private const ushort GpsIfd = 34853;
-    private const ushort InteropIfd = 40965;
+    private const ushort ExifIfd = TiffTag.ExifIfd;
+    private const ushort GpsIfd = TiffTag.GpsIfd;
+    private const ushort InteropIfd = TiffTag.InteropIfd;
 
-    // ImageDescription, Make, Model, Orientation, Software, DateTime, Artist, Copyright.
-    private static readonly ushort[] Ifd0Tags = [270, 271, 272, TiffTag.Orientation, 305, 306, 315, 33432];
+    /// <summary>
+    /// The image IFD tags the block carries: ImageDescription, Make, Model, Orientation, Software, DateTime, Artist,
+    /// Copyright.
+    /// </summary>
+    public static ReadOnlySpan<ushort> Ifd0Tags => [270, 271, 272, TiffTag.Orientation, TiffTag.Software, 306, 315, 33432];
 
     public static byte[]? Build(ReadOnlySpan<byte> data, TiffDirectory image, ImageDecodeContext context)
     {
         TiffDirectory? exif = image.TryParseSubdirectory(data, ExifIfd);
         TiffDirectory? gps = image.TryParseSubdirectory(data, GpsIfd);
         TiffDirectory? interop = exif?.TryParseSubdirectory(data, InteropIfd);
-        List<TiffEntry> ifd0 = [.. Copyable(image).Where(e => Array.IndexOf(Ifd0Tags, e.Tag) >= 0)];
+        List<TiffEntry> ifd0 = [.. Copyable(image).Where(e => Ifd0Tags.Contains(e.Tag))];
         bool onlyDefaultOrientation = ifd0 is [{ Tag: TiffTag.Orientation } o] && image.GetUInt(data, o, 0) == 1;
         if (exif is null && gps is null && (ifd0.Count == 0 || onlyDefaultOrientation))
         {
@@ -58,8 +61,11 @@ internal static class TiffExifBuilder
         return block;
     }
 
-    // Pointer tags are relinked by the builder; values of the BigTIFF-only types have no classic encoding.
-    private static List<TiffEntry> Copyable(TiffDirectory ifd)
+    /// <summary>
+    /// The entries of <paramref name="ifd"/> without the pointer tags, which are relinked, and without values of the
+    /// BigTIFF-only types, which have no classic encoding.
+    /// </summary>
+    public static List<TiffEntry> Copyable(TiffDirectory ifd)
     {
         var copied = new List<TiffEntry>();
         foreach (TiffEntry e in ifd.Entries)

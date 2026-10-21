@@ -14,6 +14,15 @@ and Pillow and libtiff must stay within the tolerance of JpegTests (mean differe
 
 For LZW, PackBits and CCITT Group 4 files, libtiff also writes the decoded strips again with the same layout, compression and
 predictor (TIFFWriteEncodedStrip); its raw strips must equal ours byte for byte.
+
+An entry with "exif" names a JPEG that carries the EXIF block written into the file. Pillow (getexif) must read the same
+descriptive IFD0 tags (Software too when "software" is set) and the same EXIF, GPS and interoperability IFDs from both,
+and libtiff must read the EXIF and GPS IFDs (TIFFReadEXIFDirectory, TIFFReadGPSDirectory) without a warning, with the
+tags Pillow reads.
+
+An entry with "original" is a file rewritten by Image.EditMetadata: libtiff must read every IFD of it to the same
+pixels as of the original (TIFFReadRGBAImage) with no warning the original does not give, and the metadata of the
+first page as for the other entries; Pillow is used only for the files it opens.
 """
 
 import ctypes
@@ -46,20 +55,52 @@ lib.TIFFReadRawStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void
 lib.TIFFReadRawStrip.restype = ctypes.c_int64
 lib.TIFFWriteEncodedStrip.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int64]
 lib.TIFFWriteEncodedStrip.restype = ctypes.c_int64
+lib.TIFFReadDirectory.argtypes = [ctypes.c_void_p]
+lib.TIFFSetDirectory.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+lib.TIFFIsTiled.argtypes = [ctypes.c_void_p]
+lib.TIFFNumberOfTiles.argtypes = [ctypes.c_void_p]
+lib.TIFFNumberOfTiles.restype = ctypes.c_uint32
+lib.TIFFTileSize.argtypes = [ctypes.c_void_p]
+lib.TIFFTileSize.restype = ctypes.c_int64
+lib.TIFFReadEncodedTile.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int64]
+lib.TIFFReadEncodedTile.restype = ctypes.c_int64
+lib.TIFFReadEXIFDirectory.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+lib.TIFFReadGPSDirectory.argtypes = [ctypes.c_void_p, ctypes.c_uint64]
+lib.TIFFGetTagListCount.argtypes = [ctypes.c_void_p]
+lib.TIFFGetTagListEntry.argtypes = [ctypes.c_void_p, ctypes.c_int]
+lib.TIFFGetTagListEntry.restype = ctypes.c_uint32
 
 IMAGEWIDTH, IMAGELENGTH, BITSPERSAMPLE, COMPRESSION, PHOTOMETRIC = 256, 257, 258, 259, 262
 SAMPLESPERPIXEL, ROWSPERSTRIP, PLANARCONFIG, PREDICTOR, EXTRASAMPLES = 277, 278, 284, 317, 338
 XMLPACKET, ICCPROFILE = 700, 34675
+EXIFIFD, GPSIFD, INTEROPIFD = 34665, 34853, 40965
+NEWSUBFILETYPE, SUBFILETYPE = 254, 255
+DESCRIPTIVE = (270, 271, 272, 274, 306, 315, 33432)
+# libtiff 4.5.1 has no field for the interoperability pointer in its EXIF field array; it warns for any file with one.
+INTEROP_WARNING = "TIFFReadCustomDirectory: Unknown field with tag 40965 (0xa005) encountered"
+SOFTWARE = 305
+ORIENTATION = 274
+# Pillow applies the orientation on load (exif_transpose); these undo it.
+UNDO = {2: Image.Transpose.FLIP_LEFT_RIGHT, 3: Image.Transpose.ROTATE_180, 4: Image.Transpose.FLIP_TOP_BOTTOM,
+        5: Image.Transpose.TRANSPOSE, 6: Image.Transpose.ROTATE_90, 7: Image.Transpose.TRANSVERSE,
+        8: Image.Transpose.ROTATE_270}
 CCITT_G4, LZW, DEFLATE, PACKBITS = 4, 5, 8, 32773
 
 messages = []
 totals = {LZW: 0, PACKBITS: 0, CCITT_G4: 0}
+checked = {"exif": 0, "edited": 0}
 HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p)
 
 
+libc = ctypes.CDLL(None)
+libc.vsnprintf.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_void_p]
+
+
 @HANDLER
-def record(module, fmt, _args):
-    messages.append(f"{(module or b'').decode()}: {(fmt or b'').decode()}")
+def record(module, fmt, args):
+    text = ctypes.create_string_buffer(1024)
+    libc.vsnprintf(text, len(text), fmt, args)
+    messages.append(f"{(module or b'').decode()}: {text.value.decode(errors='replace')}")
 
 
 lib.TIFFSetWarningHandler(record)
@@ -139,15 +180,18 @@ def get_blob(tif, tag):
     return ctypes.string_at(ptr, count.value)
 
 
-def libtiff_read(path):
-    """The top-left oriented TIFFReadRGBAImage raster as an (h, w, 4) array, the ICC profile and the XMP packet."""
+def libtiff_read(path, orientation=1):
+    """
+    The TIFFReadRGBAImage raster as an (h, w, 4) array, the ICC profile and the XMP packet. libtiff only flips the
+    raster to the requested orientation, treating 5-8 as 1-4, so requesting the file's own one keeps the stored order.
+    """
     tif = lib.TIFFOpen(path.encode(), b"r")
     if not tif:
         raise RuntimeError("TIFFOpen failed")
     try:
         w, h = get_u32(tif, IMAGEWIDTH), get_u32(tif, IMAGELENGTH)
         raster = (ctypes.c_uint32 * (w * h))()
-        if not lib.TIFFReadRGBAImageOriented(tif, w, h, raster, 1, 1):
+        if not lib.TIFFReadRGBAImageOriented(tif, w, h, raster, (orientation - 1) % 4 + 1, 1):
             raise RuntimeError("TIFFReadRGBAImageOriented failed")
         v = np.frombuffer(raster, np.uint32).reshape(h, w)
         rgba = np.dstack([(v >> s) & 0xFF for s in (0, 8, 16, 24)]).astype(np.uint8)
@@ -168,7 +212,151 @@ def close(a, b):
     return d.mean() < 1.5 and d.max() <= 24, f"mean {d.mean():.3f}, max {d.max()}"
 
 
+def pillow_exif(path, software, page=0):
+    """The EXIF Pillow reads: the descriptive IFD0 tags and the EXIF, GPS and interoperability IFDs without pointers."""
+    with Image.open(path) as im:
+        im.seek(page)
+        exif = im.getexif()
+        tags = DESCRIPTIVE + ((SOFTWARE,) if software else ())
+        ifd0 = {t: v for t, v in exif.items() if t in tags}
+        sub = {t: v for t, v in exif.get_ifd(EXIFIFD).items() if t != INTEROPIFD}
+        interop = dict(exif.get_ifd(INTEROPIFD)) if EXIFIFD in exif else {}
+        return {"ifd0": ifd0, "exif": sub, "gps": dict(exif.get_ifd(GPSIFD)), "interop": interop}
+
+
+def first_page(path):
+    """The index of the first full-resolution IFD, which the decoder reads as page 0 (0 when every IFD is reduced)."""
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    if not tif:
+        return 0
+    try:
+        index = 0
+        while True:
+            new, old = ctypes.c_uint32(), ctypes.c_uint16()
+            reduced = (lib.TIFFGetField(tif, NEWSUBFILETYPE, ctypes.byref(new)) and new.value & 1) or \
+                (lib.TIFFGetField(tif, SUBFILETYPE, ctypes.byref(old)) and old.value == 2)
+            if not reduced:
+                return index
+            if not lib.TIFFReadDirectory(tif):
+                return 0
+            index += 1
+    finally:
+        lib.TIFFClose(tif)
+
+
+def libtiff_exif(path, page=0):
+    """The tags of the EXIF and GPS IFDs of IFD <page> as libtiff reads them, by IFD, and the messages of those reads."""
+    found, warnings = {}, []
+    for name, tag, read in (("exif", EXIFIFD, lib.TIFFReadEXIFDirectory), ("gps", GPSIFD, lib.TIFFReadGPSDirectory)):
+        tif = lib.TIFFOpen(path.encode(), b"r")
+        try:
+            lib.TIFFSetDirectory(tif, page)
+            offset = ctypes.c_uint64()
+            if not lib.TIFFGetField(tif, tag, ctypes.byref(offset)):
+                found[name] = set()
+                continue
+            messages.clear()
+            if not read(tif, offset.value):
+                raise RuntimeError(f"libtiff could not read the {name} IFD")
+            warnings += messages
+            found[name] = {lib.TIFFGetTagListEntry(tif, i) for i in range(lib.TIFFGetTagListCount(tif))}
+        finally:
+            lib.TIFFClose(tif)
+    return found, warnings
+
+
+def verify_exif(path, entry, pillow=True, page=0):
+    """The EXIF checks; without <pillow> only libtiff reads the file, against what Pillow reads from the JPEG."""
+    errors = []
+    checked["exif"] += 1
+    expected = pillow_exif(os.path.join(os.path.dirname(path), entry["exif"]), entry.get("software"))
+    ours = pillow_exif(path, entry.get("software"), page) if pillow else expected
+    for ifd in expected:
+        if ours[ifd] != expected[ifd]:
+            errors.append(f"Pillow {ifd} IFD differs: {ours[ifd]} vs {expected[ifd]}")
+    tags, warnings = libtiff_exif(path, page)
+    if any(m != INTEROP_WARNING for m in warnings):
+        errors.append("libtiff EXIF: " + "; ".join(warnings))
+    for ifd in ("exif", "gps"):
+        # libtiff lists the interoperability pointer with the EXIF tags.
+        wanted = set(expected[ifd]) | ({INTEROPIFD} if ifd == "exif" and expected["interop"] else set())
+        if tags[ifd] != wanted:
+            errors.append(f"libtiff {ifd} tags {sorted(tags[ifd])} vs {sorted(wanted)}")
+    return errors
+
+
+def libtiff_pages(path):
+    """The SHA-256 of the decoded strips or tiles of every IFD (None where libtiff cannot decode them) and its messages."""
+    messages.clear()
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    pages = []
+    if not tif:
+        return pages, list(messages)
+    try:
+        while True:
+            tiled = lib.TIFFIsTiled(tif)
+            count = lib.TIFFNumberOfTiles(tif) if tiled else lib.TIFFNumberOfStrips(tif)
+            size = lib.TIFFTileSize(tif) if tiled else lib.TIFFStripSize(tif)
+            digest = hashlib.sha256()
+            for i in range(count):
+                buf = ctypes.create_string_buffer(size)
+                n = (lib.TIFFReadEncodedTile if tiled else lib.TIFFReadEncodedStrip)(tif, i, buf, size)
+                if n < 0:
+                    digest = None
+                    break
+                digest.update(buf.raw[:n])
+            pages.append(digest and digest.hexdigest())
+            if not lib.TIFFReadDirectory(tif):
+                break
+    finally:
+        lib.TIFFClose(tif)
+    return pages, list(messages)
+
+
+def verify_edited(path, entry):
+    errors = []
+    original = os.path.join(os.path.dirname(path), entry["original"])
+    theirs, before = libtiff_pages(original)
+    ours, after = libtiff_pages(path)
+    if ours != theirs:
+        errors.append(f"libtiff pages differ from the original: {len(ours)} vs {len(theirs)} IFDs")
+    new = [m for m in after if m not in before]
+    if new:
+        errors.append("libtiff: " + "; ".join(new))
+    checked["edited"] += 1
+    page = first_page(original)
+    tif = lib.TIFFOpen(path.encode(), b"r")
+    if tif:
+        lib.TIFFSetDirectory(tif, page)
+        if (sha(get_blob(tif, ICCPROFILE)), sha(get_blob(tif, XMLPACKET))) != (entry["icc"], entry["xmp"]):
+            errors.append("libtiff ICC or XMP differs")
+        lib.TIFFClose(tif)
+    pillow = opens(original)
+    if pillow:
+        with Image.open(path) as im:
+            im.seek(page)
+            if sha(im.tag_v2.get(XMLPACKET)) != entry["xmp"] or sha(im.info.get("icc_profile")) != entry["icc"]:
+                errors.append("Pillow ICC or XMP differs")
+            dpi = [float(d) for d in im.info.get("dpi", (0, 0))]
+            if any(abs(a - b) > 1e-3 for a, b in zip(dpi, entry["dpi"])):
+                errors.append(f"Pillow dpi {dpi}")
+    if entry["exif"] and tif:
+        errors += verify_exif(path, entry, pillow, page)
+    return errors
+
+
+def opens(path):
+    """Whether Pillow opens the file; it does not support every layout libtiff reads."""
+    try:
+        with Image.open(path):
+            return True
+    except Exception:
+        return False
+
+
 def verify(path, entry):
+    if entry.get("original"):
+        return verify_edited(path, entry)
     errors = []
     ours = None
     if entry.get("decoded"):
@@ -177,11 +365,13 @@ def verify(path, entry):
         if sha(ours.tobytes()) != entry["sha256"]:
             errors.append("decoded PNG differs from written.json")
     with Image.open(path) as im:
+        orientation = im.tag_v2.get(ORIENTATION, 1)
         im.load()
-        pil = np.asarray(im.convert("RGBA"))
+        stored = im.transpose(UNDO[orientation]) if orientation in UNDO else im
+        pil = np.asarray(stored.convert("RGBA"))
         premultiplied = im.mode == "RGBA"
-        if im.size != (entry["width"], entry["height"]):
-            errors.append(f"Pillow size {im.size}")
+        if stored.size != (entry["width"], entry["height"]):
+            errors.append(f"Pillow size {stored.size}")
         if ours is not None:
             ok, detail = close(pil, ours)
             if not ok:
@@ -197,7 +387,7 @@ def verify(path, entry):
             errors.append(f"Pillow dpi {dpi}")
 
     messages.clear()
-    raster, icc, xmp = libtiff_read(path)
+    raster, icc, xmp = libtiff_read(path, orientation)
     if messages:
         errors.append("libtiff: " + "; ".join(messages))
     if ours is not None:
@@ -210,6 +400,9 @@ def verify(path, entry):
         errors.append("libtiff ICC differs")
     if sha(xmp) != entry["xmp"]:
         errors.append("libtiff XMP differs")
+
+    if entry.get("exif"):
+        errors += verify_exif(path, entry)
 
     layout, ours = read_strips(path, raw=True)
     if layout[COMPRESSION] in totals:
@@ -234,7 +427,8 @@ def main():
         print(f"{'FAIL' if errors else 'ok  '} {name}" + ("".join(f"\n     {e}" for e in errors)))
         failed += bool(errors)
     print(f"{len(manifest) - failed}/{len(manifest)} files verified; strips identical to libtiff: "
-          f"LZW {totals[LZW]} bytes, PackBits {totals[PACKBITS]} bytes, Group 4 {totals[CCITT_G4]} bytes")
+          f"LZW {totals[LZW]} bytes, PackBits {totals[PACKBITS]} bytes, Group 4 {totals[CCITT_G4]} bytes; "
+          f"EXIF checked in {checked['exif']}, edited files {checked['edited']}")
     sys.exit(1 if failed else 0)
 
 

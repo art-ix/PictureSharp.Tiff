@@ -78,12 +78,14 @@ internal sealed class TiffDirectory
 
     /// <summary>
     /// Reads only what walking the IFD chain needs: whether the IFD is a reduced-resolution image
-    /// (<c>NewSubfileType</c> bit 0 or <c>SubfileType</c> 2) and the next offset. Returns false for an IFD outside the file.
+    /// (<c>NewSubfileType</c> bit 0 or <c>SubfileType</c> 2), the next offset and where it is stored. Returns false for an
+    /// IFD outside the file.
     /// </summary>
-    public static bool TryScan(ReadOnlySpan<byte> data, TiffHeader header, ulong offset, out bool reduced, out ulong next)
+    public static bool TryScan(ReadOnlySpan<byte> data, TiffHeader header, ulong offset, out bool reduced, out ulong next, out long link)
     {
         reduced = false;
         next = 0;
+        link = 0;
         if (!TryCount(data, header, offset, out int count))
         {
             return false;
@@ -103,6 +105,7 @@ internal sealed class TiffDirectory
         }
 
         next = NextOffset(data, header, offset, count);
+        link = (long)offset + header.CountSize + ((long)header.EntrySize * count);
         return true;
     }
 

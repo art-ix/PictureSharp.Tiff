@@ -21,7 +21,9 @@ the t4.h run code tables); YCbCr to RGB (tif_color.c
 TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); packed
 YCbCr strip sizes (tif_strip.c TIFFVStripSize64); the BigTIFF header check (tif_open.c). The Deflate output limit
 follows tif_zip.c ZIPDecode, the JPEG table handling tif_jpeg.c JPEGPreDecode and the JPEG output tags tif_jpeg.c
-JPEGSetupEncode. The code was translated to C#; it
+JPEGSetupEncode; the EXIF and GPS IFDs are written as tif_dir.c TIFFCreateEXIFDirectory and
+TIFFWriteCustomDirectory do, and metadata edits append the directory as tif_dirwrite.c TIFFRewriteDirectory does. The
+code was translated to C#; it
 is not the original source.
 -------------------------------------------------------------------------------
 Copyright (c) 1988-1997 Sam Leffler

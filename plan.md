@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1 (writer foundation) and
-0.4.3 (JPEG, CCITT Group 4, bilevel) done locally. Next: 0.4.4 EXIF and metadata editing; writing is released as 0.5.0.**
+**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1–0.4.4 (writer, compressions,
+EXIF and metadata editing) done locally. Next: 0.4.5 WebP compression; writing is released as 0.5.0.**
 
 ## Versions
 
@@ -19,7 +19,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 | 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Done, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Done, local |
-| 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Planned, local |
+| 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Done, local |
 | 0.4.5 | WebP compression (50001), read and write, through the core WebP codec | Planned, local |
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Planned |
 
@@ -201,6 +201,29 @@ Done (JPEG, on PictureSharp 0.7.9):
 - DoD: EXIF round trip (our reader, Pillow `getexif`, libtiff `TIFFReadEXIFDirectory`); orientation honoured by
   `ApplyExifOrientation`; `EditMetadata` on the whole decoder corpus leaves pixels identical and libtiff reads the
   result without warnings.
+
+Done 2026-10-21. Decisions and deviations:
+- `TiffIfdWriter` now writes either byte order and BigTIFF, copies entries from another stream converting the byte
+  order per type, and places child IFDs (EXIF, GPS, interop) after the IFD. `TiffExifWriter` is the inverse of
+  `TiffExifBuilder`: the block's IFD0 tags from the same list (ImageDescription, Make, Model, Orientation, Software,
+  DateTime, Artist, Copyright), sub-IFDs relinked; IFD1 (thumbnail), YCbCrPositioning and resolution are dropped.
+- Encoder: EXIF when `Metadata` includes `Exif`; Software always names the encoder (the block's is dropped). A block
+  that is not a TIFF stream is left out silently, as the reader drops broken sub-IFDs (the core does not validate the
+  setter). Maker notes are copied as bytes, so offset-based ones may not survive (as with the reader's block).
+- `Rewrite`: the page's IFD (the same page `TiffDecoderOptions` selects for reading) is copied to the end of the file
+  in the file's byte order and variant, only the changed kinds replace their tags (EXIF: the list above plus 34665/34853;
+  ICC; XMP; resolution as inches), the link to the old IFD is patched (`TiffFile.Link`) and the new IFD links to the old
+  one's next. Gamma, chromaticities or sRGB intent changes throw `NotSupportedException` (as the core JPEG codec).
+  Unchanged entries keep their values, including pointers into the file (strips, tiles, SubIFDs, unchanged EXIF).
+- Note: every file the encoder writes reads back with an EXIF block holding Software, as before (the reader includes
+  Software in the block).
+- Oracles: `verify_written.py` compares EXIF with Pillow `getexif` against a JPEG carrying the same block
+  (`name.exif.jpg`) and reads the EXIF and GPS IFDs with libtiff (`TIFFReadEXIFDirectory`, `TIFFReadGPSDirectory`);
+  libtiff 4.5.1 has no field for the interop pointer 40965 and warns about it even on the original corpus file, so that
+  one warning is ignored. Pillow and libtiff apply the orientation, so the script undoes it before comparing pixels.
+  The `written.edited` pass checks every IFD's decoded strips/tiles against the original and that libtiff gives no new
+  warning. Measured: 46/46 snapshots (2 new with EXIF in both byte orders), 455/455 corpus files (EXIF in 10), 91/91
+  edited corpus files (EXIF compared in 90), all pages identical. `EditMetadata` added to the fuzz loop. 1372 tests.
 
 ### 0.4.5 — WebP compression
 

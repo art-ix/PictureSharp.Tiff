@@ -2,8 +2,11 @@ namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
 /// Options for the TIFF encoder, which writes the first frame as one little-endian classic TIFF page in strips with
-/// contiguous 8-bit (or 1-bit black-and-white) samples, by default LZW-compressed with the horizontal predictor. Resolution is always written (in dots per inch); ICC and XMP blocks are written as tags
-/// 34675 and 700 when <see cref="EncoderOptions.Metadata"/> allows them.
+/// contiguous 8-bit (or 1-bit black-and-white) samples, by default LZW-compressed with the horizontal predictor.
+/// Resolution is always written (in dots per inch). When <see cref="EncoderOptions.Metadata"/> allows them, ICC and XMP
+/// are written as tags 34675 and 700, and the EXIF block as the image IFD's descriptive tags and orientation with its
+/// EXIF, GPS and interoperability IFDs; Software always names this encoder, and an EXIF block that is not a TIFF stream
+/// is left out.
 /// </summary>
 /// <example>
 /// <code>

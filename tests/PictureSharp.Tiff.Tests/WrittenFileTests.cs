@@ -88,6 +88,18 @@ public sealed class WrittenFileTests
 
             return image;
         }, EncoderSupport.Options(rowsPerStrip: 16, compression: TiffCompression.Jpeg), TiffColorType.Rgb);
+        yield return ("rgb_exif_be_9x7_lzw", () =>
+        {
+            Image image = EncoderSupport.Pattern(9, 7);
+            image.Metadata.Exif = ExifSample.Block(bigEndian: true);
+            return image;
+        }, EncoderSupport.Options(compression: TiffCompression.Lzw), TiffColorType.Rgb);
+        yield return ("gray_exif_le_7x3_orientation8", () =>
+        {
+            Image image = EncoderSupport.Pattern(7, 3, gray: true);
+            image.Metadata.Exif = ExifSample.Block(bigEndian: false, orientation: 8);
+            return image;
+        }, EncoderSupport.Options(), TiffColorType.Grayscale);
         yield return ("gray_7x3_deflate_level0", () => EncoderSupport.Pattern(7, 3, gray: true), EncoderSupport.Options(compression: TiffCompression.Deflate) with { DeflateLevel = 0 }, TiffColorType.Grayscale);
     }
 
@@ -111,7 +123,8 @@ public sealed class WrittenFileTests
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
             }
 
-            manifest[name + ".tif"] = Entry(image, options.Compression == TiffCompression.Jpeg ? Decoded(image, Received, name) : null);
+            manifest[name + ".tif"] = Entry(image, options.Compression == TiffCompression.Jpeg ? Decoded(image, Received, name) : null,
+                MetadataWriteTests.ExifReference(source.Metadata.Exif, Received, name));
 
             string snapshot = Path.Combine(Snapshots, name + ".tif");
             File.WriteAllBytes(Path.Combine(Received, name + ".tif"), file);
@@ -151,7 +164,7 @@ public sealed class WrittenFileTests
                 if (compression == TiffCompression.Jpeg)
                 {
                     await Assert.That(EncoderSupport.JpegStripsMatch(file, image, EncoderSupport.Tags(file)[277].Value == 1 ? 1 : 3)).IsTrue();
-                    Record(name, compression, file, image, manifest);
+                    Record(name, compression, file, source, image, manifest);
                     continue;
                 }
 
@@ -159,18 +172,19 @@ public sealed class WrittenFileTests
                     ? EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite))
                     : EncoderSupport.Sha256(source.GetPixelSpan());
                 await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(expected);
-                Record(name, compression, file, image, manifest);
+                Record(name, compression, file, source, image, manifest);
             }
         }
 
         File.WriteAllText(Path.Combine(CorpusOutput, "written.json"), manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void Record(string name, TiffCompression compression, byte[] file, Image image, JsonObject manifest)
+    private static void Record(string name, TiffCompression compression, byte[] file, Image source, Image image, JsonObject manifest)
     {
-        string written = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}.tif";
-        File.WriteAllBytes(Path.Combine(CorpusOutput, written), file);
-        manifest[written] = Entry(image, compression == TiffCompression.Jpeg ? Decoded(image, CorpusOutput, Path.GetFileNameWithoutExtension(written)) : null);
+        string stem = $"{Path.GetFileNameWithoutExtension(name)}.{compression.ToString().ToLowerInvariant()}";
+        File.WriteAllBytes(Path.Combine(CorpusOutput, stem + ".tif"), file);
+        manifest[stem + ".tif"] = Entry(image, compression == TiffCompression.Jpeg ? Decoded(image, CorpusOutput, stem) : null,
+            MetadataWriteTests.ExifReference(source.Metadata.Exif, CorpusOutput, stem));
     }
 
     /// <summary>
@@ -184,9 +198,10 @@ public sealed class WrittenFileTests
         return file;
     }
 
-    private static JsonObject Entry(Image image, string? decoded = null) => new()
+    private static JsonObject Entry(Image image, string? decoded, string? exif) => new()
     {
         ["decoded"] = decoded,
+        ["exif"] = exif,
         ["width"] = image.Width,
         ["height"] = image.Height,
         ["sha256"] = EncoderSupport.Sha256(image.GetPixelSpan()),

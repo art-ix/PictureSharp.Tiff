@@ -40,9 +40,13 @@ public sealed class TiffFormat : IImageFormatModule
     /// <inheritdoc/>
     public IImageFormatDecoder Decoder => TiffDecoder.Instance;
 
-    /// <summary>Writes uncompressed 8-bit strips as described on <see cref="TiffEncoderOptions"/>.</summary>
+    /// <summary>Writes the first frame as described on <see cref="TiffEncoderOptions"/>.</summary>
     public IImageFormatEncoder Encoder => TiffEncoder.Instance;
 
-    /// <summary>Reads ICC, EXIF, XMP and resolution for <c>Image.ReadMetadata</c>; rewriting is not supported.</summary>
+    /// <summary>
+    /// Reads ICC, EXIF, XMP and resolution for <c>Image.ReadMetadata</c>. <c>Image.EditMetadata</c> appends a new IFD for
+    /// the page with the changed tags and relinks it, so the image data and the other pages stay byte-identical; gamma,
+    /// chromaticities and sRGB intent cannot be stored and throw <see cref="NotSupportedException"/>.
+    /// </summary>
     public IImageFormatMetadataCodec MetadataCodec => TiffMetadataCodec.Instance;
 }

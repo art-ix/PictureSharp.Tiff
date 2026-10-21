@@ -2,7 +2,7 @@
 
 PictureSharp.Tiff is a format plugin for [PictureSharp](https://github.com/art-ix/PictureSharp) that reads and writes
 TIFF entirely in C#. It is a separate repository and package with its own version; it uses PictureSharp only through its
-public NuGet API. Version 0.3.0 (extended TIFF) is the first release; writing is in progress (0.4.1–0.4.4, released as
+public NuGet API. Version 0.3.0 (extended TIFF) is the first release; writing is in progress (0.4.1–0.4.5, released as
 0.5.0).
 
 Before starting, read [plan.md](plan.md) to identify the current version and its definition of done (DoD), then read
@@ -60,7 +60,9 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
   ```
 
   The same script checks `written.corpus/`, where every test run writes the corpus re-encoded with PackBits, LZW, CCITT Group 4, JPEG and
-  Deflate; for LZW and PackBits it also requires strips byte-identical to libtiff's.
+  Deflate (for LZW, PackBits and Group 4 it also requires strips byte-identical to libtiff's), and `written.edited/`,
+  where the corpus is rewritten by `Image.EditMetadata` next to the originals (libtiff must decode every IFD as before).
+  Files with EXIF come with a JPEG carrying the same block (`name.exif.jpg`), which Pillow reads for comparison.
 
 - `reference/tiff-4.5.1/` holds the libtiff sources the codecs are ported from (downloaded with the user's approval
   on 2026-10-21 from download.osgeo.org, SHA-256 `d7f38b67…a5e2b`).
