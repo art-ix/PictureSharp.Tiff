@@ -16,7 +16,8 @@ in PictureSharp itself go to the core repository's `plan.md` (sibling folder `..
   the BCL: no other `PackageReference`, native libraries or P/Invoke. Use only public PictureSharp API; no
   `InternalsVisibleTo` or reflection. An architecture test checks this.
 - Deflate uses `System.IO.Compression.ZLibStream` (decided by the user on 2026-10-17: it ships with the runtime on
-  every platform). Copy no code from the core.
+  every platform). Compression may use it too (decided by the user on 2026-10-21, for writing TIFF). Copy no code
+  from the core.
 - Do not use the `unsafe` keyword. Use `Span<T>`, `ref`, `Unsafe.Add` and `MemoryMarshal`.
 - Public API uses `PictureSharp.Formats.Tiff` (`TiffFormat`, `ImageFormat.Tiff`); codecs are `internal`.
 - Return `Image` pixels as `Rgba32` with straight alpha; reduce deeper samples to 8 bits with documented rounding.

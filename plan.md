@@ -3,7 +3,8 @@
 Wtyczka TIFF (tylko odczyt) dla PictureSharp, wydzielona z `PictureSharp.Formats.Extra` (decyzja użytkownika
 z 2026-10-17). Osobne repozytorium i własny SemVer, jak `PictureSharp.Heif`. Zależność wyłącznie od publicznego pakietu
 `PictureSharp` (minimum 0.7.8), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
-użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia).
+użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia). Kompresja przez
+`System.IO.Compression` też jest dopuszczona (decyzja użytkownika z 2026-10-21, na potrzeby ewentualnego zapisu TIFF).
 
 **Status: 0.3.0 — pierwsze wydanie (2026-10-21, tag `v0.3.0`, GitHub Release, NuGet).** Wersje 0.1.0 (szkielet) i
 0.2.0 nie były wydawane osobno.
