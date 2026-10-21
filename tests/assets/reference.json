@@ -1,4 +1,148 @@
 {
+ "bigtiff_gray16_tiles_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+ },
+ "bigtiff_pages.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+ },
+ "bigtiff_rgb8_lzw.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+ },
+ "bilevel_g3.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g3_2d.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g3_2d_fillorder2.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g3_fill.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g4.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g4_fillorder2_be.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_g4_minisblack_tiles.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "fd5130fed7b488496ddf08be8d290b86497974216d13e6b5329c9b2a3e1a712c"
+ },
+ "bilevel_rle.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "02d472da6e9c95be08cb2536b026a8f41631debc7f808d387251ce46981f1131"
+ },
+ "bilevel_rlew.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "33785356bb1b736f83a7302059cb4ce86e2fd0d61bffcd807add4f8f74821d9a"
+ },
+ "cmyk16_lzw_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "35c70ae09768485b4bfa4ffc9b07a9842d063f2b24b95dd38a9d592133831773"
+ },
+ "cmyk8_lzw_predictor_tiles.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "61a1d436b55e8670f4a5f5bc507e6ec7a1de506fb6735bb6daea5918827ab4e3"
+ },
+ "cmyk8_none.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "61a1d436b55e8670f4a5f5bc507e6ec7a1de506fb6735bb6daea5918827ab4e3"
+ },
+ "cmyk8_separate_deflate.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "61a1d436b55e8670f4a5f5bc507e6ec7a1de506fb6735bb6daea5918827ab4e3"
+ },
+ "cmyka8_straight.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "eb1f702b1e3602ef274d696a7cc6eb879f1238450a7fee543c8f90defc34577a"
+ },
+ "exif.tif": {
+  "width": 8,
+  "height": 6,
+  "oracle": "model",
+  "sha256": "5b1e5417256825d9276d4ab33a195a060db788451ee2fa98f1c36bde4155aee3"
+ },
+ "float32_gray_predictor3_tiles.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+ },
+ "float32_gray_separate_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "c3fc597997021d952c590dca2cb60653cb219ff8740d1ba6d9e9b11601c7e022"
+ },
+ "float32_rgb_deflate_predictor3_be.tif": {
+  "width": 21,
+  "height": 13,
+  "oracle": "model",
+  "sha256": "95467a454ea637264a33b4ce5bac8de192115d1132b63b4490d4384615462b3f"
+ },
+ "float32_rgb_lzw_predictor3.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "8aa055a5e54bd46aaf3dd987e9e81d0bb8c9efb3c5b49a37d96634eaa1ce448e"
+ },
+ "float32_rgb_none.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "8aa055a5e54bd46aaf3dd987e9e81d0bb8c9efb3c5b49a37d96634eaa1ce448e"
+ },
+ "float32_rgba_assoc.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "ea86e78d0a55525070286b838f831c72b3a1018a4c0f6851bead8382331866f4"
+ },
  "gray16_lzw_predictor_be.tif": {
   "width": 37,
   "height": 23,
@@ -100,6 +244,30 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "c3fc597997021d952c590dca2cb60653cb219ff8740d1ba6d9e9b11601c7e022"
+ },
+ "im_bigtiff_rgb8_zip.tif": {
+  "width": 41,
+  "height": 27,
+  "oracle": "pillow",
+  "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
+ },
+ "im_cmyk8_lzw.tif": {
+  "width": 41,
+  "height": 27,
+  "oracle": "pillow",
+  "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
+ },
+ "im_float32_rgb_none.tif": {
+  "width": 41,
+  "height": 27,
+  "oracle": "libtiff",
+  "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
+ },
+ "im_float32_rgb_zip_predictor3.tif": {
+  "width": 41,
+  "height": 27,
+  "oracle": "libtiff",
+  "sha256": "00de07f148947151fe5361ef4745e2e8037e42037e332bdea2df13f030b6fe99"
  },
  "metadata.tif": {
   "width": 37,
@@ -310,5 +478,53 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+ },
+ "ycbcr_11.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "62053cfbf84638cbed0c8bb0a800eb9af323d6c1dd9b408c424b7a2a5d55470d"
+ },
+ "ycbcr_11_separate_refbw.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "ed9ba36f6858746bb12c5592c6a35a67541a8aa4cc8eb88312375a58989a6d3e"
+ },
+ "ycbcr_12.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "634e11c2dafc582fbb67f67b8d5b601aa11db58f7d90b1d3b989794dbd188143"
+ },
+ "ycbcr_21.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "c59fc06db64c5d39760fc9a6a0f064ff9be6caa6c86a572f1c506838c3ee7921"
+ },
+ "ycbcr_22.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "7fe57126ad6c1547dfe09a75448abd7999dfa88dde3ea5f91677c373dfcc96bc"
+ },
+ "ycbcr_22_lzw_tiles.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "pillow",
+  "sha256": "7fe57126ad6c1547dfe09a75448abd7999dfa88dde3ea5f91677c373dfcc96bc"
+ },
+ "ycbcr_42.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "5d627e5229b86fca4f51385e037c4a7f55a3a2fd146199b1f44a7dde214cf8b9"
+ },
+ "ycbcr_44.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "2aefb55f43c9300f32762f080f01a44709d28f22576548eaea0759d12d27a249"
  }
 }

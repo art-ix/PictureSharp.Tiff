@@ -49,6 +49,37 @@ public sealed class TiffDecoderTests
     }
 
     [Test]
+    public async Task Exif_IfdsBecomeTheExifBlock()
+    {
+        using Image image = TestSupport.Load(TestSupport.ReadCorpus("exif.tif"));
+        ExifProfile exif = image.Metadata.ExifProfile;
+        await Assert.That(image.Metadata.Orientation).IsEqualTo(ExifOrientation.LeftBottom);
+        await Assert.That(exif.TryGetValue(ExifTag.Make, out string? make) ? make : null).IsEqualTo("Maker");
+        await Assert.That(exif.TryGetValue(ExifTag.DateTimeOriginal, out DateTime taken) ? taken : default)
+            .IsEqualTo(new DateTime(2026, 10, 21, 9, 30, 0));
+        await Assert.That(exif.TryGetGpsLocation(out GpsLocation location)).IsTrue();
+        await Assert.That(Math.Abs(location.Latitude - (52 + 13 / 60.0 + 36 / 3600.0))).IsLessThan(1e-6);
+        await Assert.That(location.Longitude).IsEqualTo(21.0);
+        await Assert.That(TestSupport.Identify(TestSupport.ReadCorpus("exif.tif")).Orientation).IsEqualTo(ExifOrientation.LeftBottom);
+    }
+
+    [Test]
+    public async Task Exif_IsSkipped_WithIgnoreMetadata()
+    {
+        DecoderOptions options = TestSupport.Options with { IgnoreMetadata = true };
+        using Image image = TestSupport.Load(TestSupport.ReadCorpus("exif.tif"), options);
+        await Assert.That(image.Metadata.Exif).IsNull();
+    }
+
+    [Test]
+    public async Task BigTiff_CountsPages()
+    {
+        ImageInfo info = TestSupport.Identify(TestSupport.ReadCorpus("bigtiff_pages.tif"));
+        await Assert.That(info.ContainerItemCount).IsEqualTo(1);
+        await Assert.That((info.Width, info.Height)).IsEqualTo((37, 23));
+    }
+
+    [Test]
     public async Task Resolution_InCentimetres_IsConvertedToInches()
     {
         using Image image = TestSupport.Load(TestSupport.ReadCorpus("metadata_cm.tif"));
@@ -69,27 +100,37 @@ public sealed class TiffDecoderTests
     }
 
     [Test]
-    public async Task BigTiff_IsNotSupported()
-    {
-        byte[] data = [(byte)'I', (byte)'I', 43, 0, 8, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0];
-        await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
-        await Assert.That(() => TestSupport.Identify(data)).Throws<NotSupportedException>();
-    }
-
-    [Test]
-    [Arguments((ushort)259, (uint)7)]       // JPEG
-    [Arguments((ushort)259, (uint)4)]       // CCITT G4
-    [Arguments((ushort)262, (uint)5)]       // CMYK
-    [Arguments((ushort)262, (uint)6)]       // YCbCr
-    [Arguments((ushort)339, (uint)3)]       // float samples
+    [Arguments((ushort)259, (uint)6)]       // old-style JPEG
+    [Arguments((ushort)259, (uint)34925)]   // LZMA
+    [Arguments((ushort)259, (uint)50000)]   // Zstandard
+    [Arguments((ushort)262, (uint)8)]       // CIE L*a*b*
+    [Arguments((ushort)262, (uint)4)]       // transparency mask
     [Arguments((ushort)339, (uint)2)]       // signed samples
-    [Arguments((ushort)317, (uint)3)]       // floating-point predictor
+    [Arguments((ushort)339, (uint)3)]       // 8-bit floating-point samples
     [Arguments((ushort)258, (uint)12)]      // 12-bit samples
     public async Task UnsupportedFeatures_ThrowNotSupported_ButIdentify(ushort tag, uint value)
     {
         byte[] data = TiffBuilder.Gray(8, 4).Set(tag, TiffBuilder.Short, value).Build();
         await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
         await Assert.That(TestSupport.Identify(data).Width).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task FloatingPointPredictor_OnIntegerLzwSamples_ThrowsNotSupported()
+    {
+        byte[] data = TiffBuilder.Gray(8, 4).Set(259, TiffBuilder.Short, 5).Set(317, TiffBuilder.Short, 3).Build();
+        await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
+    }
+
+    [Test]
+    public async Task Predictor_IsIgnored_WithoutLzwOrDeflate()
+    {
+        // libtiff applies the predictor only in the codecs that support it.
+        byte[] plain = TiffBuilder.Gray(8, 4).Build();
+        byte[] tagged = TiffBuilder.Gray(8, 4).Set(317, TiffBuilder.Short, 2).Build();
+        using Image a = TestSupport.Load(plain);
+        using Image b = TestSupport.Load(tagged);
+        await Assert.That(TestSupport.Sha256(b)).IsEqualTo(TestSupport.Sha256(a));
     }
 
     [Test]

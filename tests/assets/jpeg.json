@@ -1,0 +1,135 @@
+{
+ "jpeg_gray_be.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_gray_be.0.jpg",
+    0,
+    0,
+    64,
+    24
+   ],
+   [
+    "jpeg/jpeg_gray_be.1.jpg",
+    0,
+    24,
+    64,
+    24
+   ]
+  ],
+  "pillow": "jpeg/jpeg_gray_be.pillow.png"
+ },
+ "jpeg_rgb.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_rgb.0.jpg",
+    0,
+    0,
+    64,
+    8
+   ],
+   [
+    "jpeg/jpeg_rgb.1.jpg",
+    0,
+    8,
+    64,
+    8
+   ],
+   [
+    "jpeg/jpeg_rgb.2.jpg",
+    0,
+    16,
+    64,
+    8
+   ],
+   [
+    "jpeg/jpeg_rgb.3.jpg",
+    0,
+    24,
+    64,
+    8
+   ],
+   [
+    "jpeg/jpeg_rgb.4.jpg",
+    0,
+    32,
+    64,
+    8
+   ],
+   [
+    "jpeg/jpeg_rgb.5.jpg",
+    0,
+    40,
+    64,
+    8
+   ]
+  ],
+  "pillow": "jpeg/jpeg_rgb.pillow.png"
+ },
+ "jpeg_ycbcr_strips.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_ycbcr_strips.0.jpg",
+    0,
+    0,
+    64,
+    16
+   ],
+   [
+    "jpeg/jpeg_ycbcr_strips.1.jpg",
+    0,
+    16,
+    64,
+    16
+   ],
+   [
+    "jpeg/jpeg_ycbcr_strips.2.jpg",
+    0,
+    32,
+    64,
+    16
+   ]
+  ],
+  "pillow": "jpeg/jpeg_ycbcr_strips.pillow.png"
+ },
+ "jpeg_ycbcr_tiles.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_ycbcr_tiles.0.jpg",
+    0,
+    0,
+    32,
+    32
+   ],
+   [
+    "jpeg/jpeg_ycbcr_tiles.1.jpg",
+    32,
+    0,
+    32,
+    32
+   ],
+   [
+    "jpeg/jpeg_ycbcr_tiles.2.jpg",
+    0,
+    32,
+    32,
+    16
+   ],
+   [
+    "jpeg/jpeg_ycbcr_tiles.3.jpg",
+    32,
+    32,
+    32,
+    16
+   ]
+  ],
+  "pillow": "jpeg/jpeg_ycbcr_tiles.pillow.png"
+ }
+}

@@ -3,15 +3,21 @@ PictureSharp.Tiff third-party notices
 
 PictureSharp.Tiff is licensed under the MIT License (see LICENSE).
 
-The IFD reader follows the TIFF 6.0 specification. Deflate uses System.IO.Compression from the .NET runtime.
+The IFD reader follows the TIFF 6.0 and BigTIFF specifications. Deflate uses System.IO.Compression from the .NET
+runtime; JPEG strips are decoded by the PictureSharp JPEG codec through its public API.
 
 -------------------------------------------------------------------------------
 LibTIFF (http://www.simplesystems.org/libtiff/), version 4.5.1
-Used for: the PackBits decoder (tif_packbits.c PackBitsDecode), the LZW decoder including old-style LSB-first codes
-(tif_lzw.c LZWSetupDecode, LZWPreDecode, LZWDecode, LZWDecodeCompat), horizontal predictor 2 (tif_predict.c
-horAcc8, horAcc16, swabHorAcc16, PredictorDecodeTile) and fill order 2 (tif_swab.c TIFFReverseBits), in
-src/PictureSharp.Tiff/Codecs; the Deflate output limit follows tif_zip.c ZIPDecode. The code was translated to C#;
-it is not the original source.
+Used for, in src/PictureSharp.Tiff/Codecs and Container: the PackBits decoder (tif_packbits.c PackBitsDecode); the
+LZW decoder including old-style LSB-first codes (tif_lzw.c LZWSetupDecode, LZWPreDecode, LZWDecode,
+LZWDecodeCompat); predictors 2 and 3 (tif_predict.c horAcc8, horAcc16, swabHorAcc16, fpAcc, PredictorDecodeTile);
+fill order 2 (tif_swab.c TIFFReverseBits); the CCITT RLE, Group 3 and Group 4 decoders (tif_fax3.c Fax3PreDecode,
+Fax3SetupState, Fax3Decode1D, Fax3Decode2D, Fax4Decode, Fax3DecodeRLE, _TIFFFax3fillruns and the tif_fax3.h
+macros) with their state tables (mkg3states.c FillTable and code lists); YCbCr to RGB (tif_color.c
+TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); packed
+YCbCr strip sizes (tif_strip.c TIFFVStripSize64); the BigTIFF header check (tif_open.c). The Deflate output limit
+follows tif_zip.c ZIPDecode and the JPEG table handling tif_jpeg.c JPEGPreDecode. The code was translated to C#; it
+is not the original source.
 -------------------------------------------------------------------------------
 Copyright (c) 1988-1997 Sam Leffler
 Copyright (c) 1991-1997 Silicon Graphics, Inc.
@@ -38,9 +44,9 @@ OF THIS SOFTWARE.
 -------------------------------------------------------------------------------
 Pillow (https://python-pillow.org), version 10.2.0, the friendly fork of the
 Python Imaging Library
-Used for: the ExtraSamples rules (TiffImagePlugin.py OPEN_INFO) and the division of premultiplied colour by alpha
-(Unpack.c unpackRGBa), matched bit for bit for 8-bit samples. The code was translated to C#; it is not the original
-source.
+Used for: the ExtraSamples rules (TiffImagePlugin.py OPEN_INFO), the division of premultiplied colour by alpha
+(Unpack.c unpackRGBa) and CMYK to RGB (Convert.c cmyk2rgb), matched bit for bit for 8-bit samples. The code was
+translated to C#; it is not the original source.
 -------------------------------------------------------------------------------
 Copyright (c) 1997-2011 by Secret Labs AB
 Copyright (c) 1995-2011 by Fredrik Lundh and contributors

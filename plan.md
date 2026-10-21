@@ -5,7 +5,8 @@ z 2026-10-17). Osobne repozytorium i własny SemVer, jak `PictureSharp.Heif`. Za
 `PictureSharp` (minimum 0.7.1), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
 użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia).
 
-**Status: 0.2.0 zaimplementowana lokalnie (2026-10-21), bez wydania.** Wersja 0.1.0 to szkielet projektu.
+**Status: 0.3.0 zaimplementowana lokalnie (2026-10-21), bez wydania; 0.2.0 w commicie `64ec003`.** Wersja 0.1.0 to
+szkielet projektu.
 
 ## Wersje
 
@@ -13,9 +14,10 @@ użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzeni
 | --- | --- | --- |
 | 0.1.0 | Szkielet: repo, CI, `TiffFormat` (rozpoznawanie TIFF/BigTIFF), dekoder zastępczy (`NotSupportedException`), testy architektury i API | Gotowa lokalnie, bez wydania |
 | 0.2.0 | TIFF podstawowy: IFD, paski i kafle, None/PackBits/LZW/Deflate, predyktor 2, gray/palette/RGB(A) 8/16 bit | Gotowa lokalnie, bez wydania |
-| 0.3.0 | TIFF rozszerzony: JPEG (7), CCITT G3/G4, predyktor 3 i float, CMYK, YCbCr, associated alpha, EXIF, BigTIFF | Wstrzymana |
+| 0.3.0 | TIFF rozszerzony: JPEG (7), CCITT G3/G4, predyktor 3 i float, CMYK, YCbCr, associated alpha, EXIF, BigTIFF | Gotowa lokalnie, bez wydania |
 
-Szkieletu 0.1.0 nie należy publikować na NuGet: pakiet rozpoznaje TIFF, ale go nie dekoduje. Pierwsze wydanie to 0.2.0.
+Szkieletu 0.1.0 nie należy publikować na NuGet: pakiet rozpoznaje TIFF, ale go nie dekoduje. Pierwsze wydanie to 0.2.0
+lub od razu 0.3.0 (do decyzji użytkownika).
 
 ## 0.2.0 — TIFF podstawowy
 
@@ -46,13 +48,37 @@ Szkieletu 0.1.0 nie należy publikować na NuGet: pakiet rozpoznaje TIFF, ale go
 
 ## 0.3.0 — TIFF rozszerzony
 
-- JPEG (7): `JPEGTables` + pasek → samodzielny JPEG → `ImageDecodeContext.DecodeEmbedded`.
-- CCITT RLE/G3/G4 (libtiff `tif_fax3.c`), predyktor 3 i float32, CMYK 8 bit, YCbCr z subsamplingiem, EXIF IFD, BigTIFF.
-- OJPEG, JBIG, LZMA, ZSTD, WebP-in-TIFF, Lab/LogLuv → `NotSupportedException`.
-- DoD: korpus `tiffcp -c jpeg|g3|g4`, ImageMagick (CMYK, float, BigTIFF); JPEG porównywany z dekodem JPEG rdzenia tych
-  samych danych, reszta = Pillow.
+- JPEG (7): `JPEGTables` bez EOI + pasek bez SOI → samodzielny JPEG → `ImageDecodeContext.DecodeEmbedded`; przy
+  `Photometric` RGB dopisywany APP14 Adobe z transform 0 (libtiff wymusza `JCS_RGB`). Obsługiwane: 8 bit, gray/RGB/YCbCr,
+  próbki razem, bez alfy; reszta → `NotSupportedException`.
+- CCITT RLE (2), RLEW (32771), G3 1D/2D (`T4Options`), G4 — port `tif_fax3.c`/`tif_fax3.h`, tablice stanów
+  generowane w czasie działania (port `mkg3states.c`, sprawdzone wpis po wpisie z `tif_fax3sm.c`). Jak libtiff:
+  nieoczekiwane kody kończą wiersz, brak danych → `ImageFormatException`, G4 z co najmniej jednym wierszem → sukces.
+- Predyktor 3 (`fpAcc`) i float32 (gray/RGB, alfa, associated): obcięcie do [0, 1], `(int)(v · 255 + 0.5)` w pojedynczej
+  precyzji, NaN → 0. Predyktor (2 i 3) stosowany tylko z LZW i Deflate, jak w libtiff (dla innych kompresji tag
+  ignorowany).
+- CMYK 8/16 bit (InkSet 1, opcjonalna alfa straight) wg Pillow `cmyk2rgb` po redukcji do 8 bit.
+- YCbCr bez JPEG: podpróbkowanie 4:4/4:2/4:1/2:2/2:1/1:2/1:1 (domyślnie 2:2), `YCbCrCoefficients`,
+  `ReferenceBlackWhite` — port `tif_color.c` (`TIFFYCbCrToRGBInit`, `TIFFYCbCrtoRGB`) i adresowania bloków z
+  `tif_getimage.c`; planar tylko 1:1.
+- EXIF: blok TIFF w kolejności bajtów pliku: IFD0 (orientacja, Make, Model, DateTime, Artist, Copyright, Software,
+  ImageDescription) + kopie IFD EXIF, GPS i Interop; typy BigTIFF pomijane. Orientacja trafia do `Metadata` przez ten blok.
+- BigTIFF (43): 8-bajtowe liczniki/offsety, wpisy 20 B, LONG8/IFD8.
+- OJPEG, JBIG, LZMA, ZSTD, WebP, LERC, JPEG 2000, PixarLog, LogLuv, Lab, maska, próbki signed i float ≠ 32 bit →
+  `NotSupportedException`.
+- DoD: korpus z libtiff 4.5.1 (ctypes) `-c jpeg|g3|g4|rle|rlew` + kafle/planar/FillOrder 2, CMYK, float, YCbCr, BigTIFF;
+  ImageMagick 6: CMYK LZW, float32 (none i zip + predyktor 3), BigTIFF zip. JPEG: każdy pasek/kafel = dekod JPEG
+  rdzenia tych samych danych (`jpeg.json`), cały obraz blisko Pillow (średnio < 1,5, max ≤ 24). Reszta: Pillow
+  (56 plików), libtiff `TIFFReadRGBAImage` (9: YCbCr bez kompresji — Pillow konwertuje go sam, bez podpróbkowania —,
+  RLEW, BigTIFF/ImageMagick) albo model reguł (23). Status: spełnione, 497 testów.
+- Znalezione błędy libtiff 4.5.1 (pliki zastąpione): zapis big-endian z predyktorem 3 ma płaszczyzny bajtów w kolejności
+  hosta i libtiff sam ich nie odczytuje (plik testowy zapisany ręcznie wg specyfikacji); RLEW wyrównuje wiersze inaczej
+  przy zapisie i odczycie (wyrocznią jest odczyt libtiff, który port odtwarza bit w bit).
+- Ograniczenie: `DecodeEmbedded` dolicza piksele pasków JPEG do `MaxPixels`, więc JPEG-TIFF wymaga ok. 2× swojej liczby
+  pikseli — zgłoszone do rdzenia.
 
 ## Zgłoszenia do rdzenia
 
+- `DecodeEmbedded` w już zarezerwowanym budżecie (paski JPEG): wpis w tabeli luk rdzenia (2026-10-21).
 - Opcje dekodera per wtyczka (wybór strony TIFF): zamknięte w rdzeniu 0.7.6 (`DecoderOptions.FormatOptions`). Użycie
   wymaga podniesienia minimalnej wersji `PictureSharp` z 0.7.1 do 0.7.6; do zaplanowania (0.2.x lub 0.3.0).

@@ -1,8 +1,9 @@
 namespace PictureSharp.Formats.Tiff.Container;
 
 /// <summary>
-/// The header and the IFD chain of a classic TIFF file. The chain walk stops at an offset seen before, at an IFD
-/// outside the file and after <see cref="MaxDirectories"/> IFDs, so loops and broken links end it instead of failing.
+/// The header and the IFD chain of a classic TIFF or BigTIFF file. The chain walk stops at an offset seen before, at
+/// an IFD outside the file and after <see cref="MaxDirectories"/> IFDs, so loops and broken links end it instead of
+/// failing.
 /// </summary>
 internal sealed class TiffFile
 {
@@ -22,33 +23,17 @@ internal sealed class TiffFile
 
     public static TiffFile Open(ReadOnlySpan<byte> data, bool countPages)
     {
-        if (!TiffDecoder.HasSignature(data))
-        {
-            throw TiffDecoder.Error("Not a TIFF file.");
-        }
-
-        bool bigEndian = data[0] == 'M';
-        if (data[2] == 43 || data[3] == 43)
-        {
-            throw new NotSupportedException("BigTIFF files are not supported yet by PictureSharp.Tiff.");
-        }
-
-        if (data.Length < 8)
-        {
-            throw TiffDecoder.Error("The TIFF header is truncated.");
-        }
-
-        uint first = TiffDirectory.U32(data, 4, bigEndian);
-        var visited = new HashSet<uint>();
-        uint selected = 0;
+        TiffHeader header = TiffHeader.Read(data);
+        var visited = new HashSet<ulong>();
+        ulong selected = 0;
         bool found = false;
         int pages = 0;
-        uint offset = first;
+        ulong offset = header.FirstIfd;
         while (offset != 0 && visited.Count < MaxDirectories && visited.Add(offset))
         {
-            if (!TiffDirectory.TryScan(data, bigEndian, offset, out bool reduced, out uint next))
+            if (!TiffDirectory.TryScan(data, header, offset, out bool reduced, out ulong next))
             {
-                if (offset == first)
+                if (offset == header.FirstIfd)
                 {
                     throw TiffDecoder.Error($"The first TIFF directory at offset {offset} lies outside the file.");
                 }
@@ -78,6 +63,6 @@ internal sealed class TiffFile
             throw TiffDecoder.Error("The TIFF file has no image directory.");
         }
 
-        return new TiffFile(TiffDirectory.Parse(data, bigEndian, found ? selected : first), Math.Max(1, pages));
+        return new TiffFile(TiffDirectory.Parse(data, header, found ? selected : header.FirstIfd), Math.Max(1, pages));
     }
 }

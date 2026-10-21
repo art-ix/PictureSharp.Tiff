@@ -1,14 +1,18 @@
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
-/// The TIFF format plugin (read only). It decodes the first full-resolution page of a classic TIFF file: strips or
-/// tiles, contiguous or planar samples, no compression, PackBits, LZW or Deflate with horizontal predictor 2, and
-/// greyscale (1-16 bits), palette (1-8 bits) or RGB (8 or 16 bits) colour with optional alpha. Other compressions,
-/// colour models and BigTIFF throw <see cref="NotSupportedException"/>.
+/// The TIFF format plugin (read only). It decodes the first full-resolution page of a classic TIFF or BigTIFF file:
+/// strips or tiles, contiguous or planar samples, no compression, PackBits, LZW or Deflate with predictor 2 or 3,
+/// JPEG (through the configuration's JPEG codec) and CCITT RLE, Group 3 and Group 4; greyscale (1-16 bits), palette
+/// (1-8 bits), RGB and CMYK (8 or 16 bits), YCbCr (8 bits, subsampled) and 32-bit floating-point colour with optional
+/// alpha. Other compressions and colour models throw <see cref="NotSupportedException"/>.
 /// </summary>
 /// <remarks>
 /// Identifying an image reports the number of full-resolution pages
-/// as <see cref="ImageInfo.ContainerItemCount"/>. Samples deeper than 8 bits become <c>round(v / 257)</c>.
+/// as <see cref="ImageInfo.ContainerItemCount"/>. Samples deeper than 8 bits become <c>round(v / 257)</c>; floating-point
+/// samples are clamped to [0, 1] and scaled to 255. The EXIF, GPS and orientation tags form
+/// <see cref="ImageMetadata.Exif"/>. JPEG strips are decoded under the same <see cref="DecoderOptions.MaxPixels"/>
+/// budget as the image, so such files need about twice their pixel count.
 /// </remarks>
 /// <example>
 /// <code>

@@ -1,6 +1,6 @@
 namespace PictureSharp.Formats.Tiff.Container;
 
-/// <summary>Reads resolution, orientation, ICC (34675) and XMP (700) from the image IFD.</summary>
+/// <summary>Reads resolution, ICC (34675), XMP (700) and the EXIF block (orientation, EXIF and GPS IFDs) of the image IFD.</summary>
 internal static class TiffMetadataReader
 {
     private const uint UnitNone = 1;
@@ -65,10 +65,10 @@ internal static class TiffMetadataReader
             metadata.Xmp = xmp.ToArray();
         }
 
-        // Assigning creates an EXIF block, so the default top-left orientation is left implicit.
-        if (Orientation(data, ifd) is { } orientation && orientation != ExifOrientation.TopLeft)
+        // The block carries the orientation too, so ImageMetadata.Orientation reads it from there.
+        if (TiffExifBuilder.Build(data, ifd, context) is { } exif)
         {
-            metadata.Orientation = orientation;
+            metadata.Exif = exif;
         }
     }
 }

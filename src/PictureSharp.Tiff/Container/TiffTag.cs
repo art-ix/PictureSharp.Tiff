@@ -19,6 +19,8 @@ internal static class TiffTag
     public const ushort XResolution = 282;
     public const ushort YResolution = 283;
     public const ushort PlanarConfiguration = 284;
+    public const ushort T4Options = 292;
+    public const ushort T6Options = 293;
     public const ushort ResolutionUnit = 296;
     public const ushort Predictor = 317;
     public const ushort ColorMap = 320;
@@ -26,8 +28,13 @@ internal static class TiffTag
     public const ushort TileLength = 323;
     public const ushort TileOffsets = 324;
     public const ushort TileByteCounts = 325;
+    public const ushort InkSet = 332;
     public const ushort ExtraSamples = 338;
     public const ushort SampleFormat = 339;
+    public const ushort JpegTables = 347;
+    public const ushort YCbCrCoefficients = 529;
+    public const ushort YCbCrSubsampling = 530;
+    public const ushort ReferenceBlackWhite = 532;
     public const ushort Xmp = 700;
     public const ushort IccProfile = 34675;
 }

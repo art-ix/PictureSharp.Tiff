@@ -6,7 +6,8 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// Turns rows of unpacked samples into straight-alpha <see cref="Rgba32"/>. Samples of 1, 2 and 4 bits scale to 8
 /// bits exactly (<c>v * 255 / max</c>); 16-bit samples become <c>round(v / 257)</c>, ties up. WhiteIsZero is
 /// inverted first, then premultiplied colour is divided by alpha at the source depth as Pillow's <c>unpackRGBa</c>
-/// does (<c>min(max, v * max / a)</c>, 0 where alpha is 0). Colour map entries become <c>round(v / 257)</c>.
+/// does (<c>min(max, v * max / a)</c>, 0 where alpha is 0). Colour map entries become <c>round(v / 257)</c>. CMYK
+/// converts after the 8-bit reduction as Pillow's <c>cmyk2rgb</c> does.
 /// </summary>
 internal sealed class TiffColorConverter
 {
@@ -77,6 +78,11 @@ internal sealed class TiffColorConverter
             {
                 pixels[x] = new Rgba32(Color(row[s], a), Color(row[s + 1], a), Color(row[s + 2], a), To8(a));
             }
+            else if (photometric == TiffLayout.Separated)
+            {
+                int nk = 255 - To8(row[s + 3]);
+                pixels[x] = new Rgba32(Ink(To8(row[s]), nk), Ink(To8(row[s + 1]), nk), Ink(To8(row[s + 2]), nk), To8(a));
+            }
             else
             {
                 byte g = Color(invert ? max - row[s] : row[s], a);
@@ -86,6 +92,13 @@ internal sealed class TiffColorConverter
     }
 
     private static byte Reduce16(uint v) => (byte)((v + 128) / 257);
+
+    // port: Pillow 10.2.0 Convert.c cmyk2rgb: nk - MULDIV255(ink, nk), where nk is 255 minus black.
+    private static byte Ink(int ink, int nk)
+    {
+        int t = ink * nk + 128;
+        return (byte)(nk - (((t >> 8) + t) >> 8));
+    }
 
     private byte Color(int v, int a)
     {
