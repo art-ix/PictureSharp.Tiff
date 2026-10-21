@@ -1,3 +1,5 @@
+using PictureSharp.Formats.Tiff.Container;
+
 namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
@@ -36,4 +38,7 @@ public sealed class TiffFormat : IImageFormatModule
 
     /// <inheritdoc/>
     public IImageFormatDecoder Decoder => TiffDecoder.Instance;
+
+    /// <summary>Reads ICC, EXIF, XMP and resolution for <c>Image.ReadMetadata</c>; rewriting is not supported.</summary>
+    public IImageFormatMetadataCodec MetadataCodec => TiffMetadataCodec.Instance;
 }

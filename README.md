@@ -7,7 +7,7 @@ planar samples, no compression, PackBits, LZW, Deflate (predictors 2 and 3), JPE
 greyscale, palette, RGB, CMYK, YCbCr and 32-bit floating-point samples with optional alpha; ICC, XMP, EXIF/GPS,
 orientation and resolution. Old-style JPEG, JBIG, LZMA, Zstandard, WebP, CIE Lab and signed samples throw
 `NotSupportedException`. Requires PictureSharp 0.7.8 or later. See the
-[0.3.0 release notes](https://github.com/art-ix/PictureSharp.Tiff/blob/v0.3.0/docs/releases/release-0.3.0.md) and
+[release notes](https://github.com/art-ix/PictureSharp.Tiff/tree/main/docs/releases) and
 [plan.md](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md).
 
 ```bash

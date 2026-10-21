@@ -30,7 +30,7 @@ in PictureSharp itself go to the core repository's `plan.md` (sibling folder `..
 ## Code and layout
 
 Follow `.editorconfig`. Enable nullable annotations, `TreatWarningsAsErrors` and XML documentation for public API. Use
-English for identifiers, comments and XML docs; project documents may use Polish. Keep types focused, match filenames
+English for identifiers, comments, XML docs and `plan.md` (user decision, 2026-10-21); `progres.md` may use Polish. Keep types focused, match filenames
 to the main type, name partial files `Type.Responsibility.cs`, and keep hot loops allocation-free.
 
 | Path | Purpose |

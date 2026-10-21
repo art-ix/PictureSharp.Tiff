@@ -28,4 +28,21 @@ public sealed class CorpusTests
         await Assert.That(info.FrameCount).IsEqualTo(1);
         await Assert.That(image.SourceFormat).IsSameReferenceAs(ImageFormat.Tiff);
     }
+
+    [Test]
+    [MethodDataSource(nameof(Files))]
+    public async Task ReadMetadata_MatchesDecode(string name)
+    {
+        byte[] data = TestSupport.ReadCorpus(name);
+        ImageMetadata metadata = Image.ReadMetadata(data, TestSupport.Options);
+        using Image image = TestSupport.Load(data);
+        await Assert.That(Hex(metadata.IccProfile)).IsEqualTo(Hex(image.Metadata.IccProfile));
+        await Assert.That(Hex(metadata.Xmp)).IsEqualTo(Hex(image.Metadata.Xmp));
+        await Assert.That(Hex(metadata.Exif)).IsEqualTo(Hex(image.Metadata.Exif));
+        await Assert.That(metadata.Orientation).IsEqualTo(image.Metadata.Orientation);
+        await Assert.That((metadata.HorizontalResolution, metadata.VerticalResolution))
+            .IsEqualTo((image.Metadata.HorizontalResolution, image.Metadata.VerticalResolution));
+    }
+
+    private static string? Hex(byte[]? block) => block is null ? null : Convert.ToHexString(block);
 }
