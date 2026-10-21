@@ -1,0 +1,134 @@
+{
+  "gray_7x3.tif": {
+    "width": 7,
+    "height": 3,
+    "sha256": "651433afade569847ac9de95dcbfab8aeb2edaf8c5d6b6bb0b53cbf5ab20a1d9",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_alpha_33x17.tif": {
+    "width": 33,
+    "height": 17,
+    "sha256": "7cf0ebb9c56a48564ceb0343eb2e3ee8b682f52eb6b018af9d8ac29a5dbfacc1",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_33x17_rows5.tif": {
+    "width": 33,
+    "height": 17,
+    "sha256": "81df23767522a790a8bc99869d17868433cf1733d43a40cf90b72cf270d83738",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgba_13x1.tif": {
+    "width": 13,
+    "height": 1,
+    "sha256": "b23e66bfe0bfdd828715b77fccb94fc7de74fa9e4304bd7020fb039f0cd56b7c",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_1x1.tif": {
+    "width": 1,
+    "height": 1,
+    "sha256": "e3820096cb82366b860b8a4e668453a7aaaf423af03bdf289fa308ea03a79332",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_1x40_rows1.tif": {
+    "width": 1,
+    "height": 40,
+    "sha256": "76f49a91a4edd459479557e91c3d58aa81940341a6ee4c8fca17f3e378575c69",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_from_rgb_16x8.tif": {
+    "width": 16,
+    "height": 8,
+    "sha256": "af4792fdba8111986f945ced803d1959dd58fb6a2d1a670ddd3102440371baf9",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "gray_alpha_from_rgba_16x8.tif": {
+    "width": 16,
+    "height": 8,
+    "sha256": "d286e5747cfef4e97080c0e106c98d511b949265ecf39f2ad5e6af4618a20875",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_from_rgba_16x8.tif": {
+    "width": 16,
+    "height": 8,
+    "sha256": "77c094836188bd74db3703785c035a7617cc830f59f0f7813fd360266075223b",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgba_opaque_8x8.tif": {
+    "width": 8,
+    "height": 8,
+    "sha256": "75a47cad72bead550f940986e28719dbe1a0fbf36389943116609854790b12be",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_128x200_strips.tif": {
+    "width": 128,
+    "height": 200,
+    "sha256": "367a15e5f63369d0ef2b61c067e43b07f99a38ea6a22c823fb8b0890e25ba5f4",
+    "dpi": [
+      96,
+      96
+    ],
+    "icc": null,
+    "xmp": null
+  },
+  "rgb_metadata_9x9.tif": {
+    "width": 9,
+    "height": 9,
+    "sha256": "b3a66092641fc3ef5ff03dc786740a374793267a2d29f1cb2597c64abe7c4f77",
+    "dpi": [
+      300,
+      150
+    ],
+    "icc": "1c42d234527e3412d69094d9ed8de564c93b031e94158629022ea0ba904138da",
+    "xmp": "77e32a621a278d4949cfe949a561385a1d44e495c5697aaaf9b4bf8e39883d9a"
+  }
+}

@@ -31,6 +31,6 @@ public sealed class TiffFormatTests
         await Assert.That(Configuration.FromExtension("scan.TIF")).IsSameReferenceAs(ImageFormat.Tiff);
         await Assert.That(Configuration.FromMimeType("image/tiff")).IsSameReferenceAs(ImageFormat.Tiff);
         await Assert.That(Configuration.CanDecode(ImageFormat.Tiff)).IsTrue();
-        await Assert.That(Configuration.CanEncode(ImageFormat.Tiff)).IsFalse();
+        await Assert.That(Configuration.CanEncode(ImageFormat.Tiff)).IsTrue();
     }
 }

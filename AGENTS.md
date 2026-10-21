@@ -1,8 +1,9 @@
 # Working on PictureSharp.Tiff
 
-PictureSharp.Tiff is a format plugin for [PictureSharp](https://github.com/art-ix/PictureSharp) that will read TIFF
-entirely in C#. It is a separate repository and package with its own version; it uses PictureSharp only through its
-public NuGet API. Version 0.3.0 (extended TIFF) is the first release.
+PictureSharp.Tiff is a format plugin for [PictureSharp](https://github.com/art-ix/PictureSharp) that reads and writes
+TIFF entirely in C#. It is a separate repository and package with its own version; it uses PictureSharp only through its
+public NuGet API. Version 0.3.0 (extended TIFF) is the first release; writing is in progress (0.4.1–0.4.4, released as
+0.5.0).
 
 Before starting, read [plan.md](plan.md) to identify the current version and its definition of done (DoD), then read
 the latest entries in `progres.md` if it exists. Append progress after significant steps and before ending a session.
@@ -48,6 +49,14 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
 
   ```bash
   python3 -I tests/assets/generate_corpus.py
+  ```
+
+- Encoder output is snapshotted in `tests/assets/written/` (files plus `written.json`). When `WrittenFileTests` fails,
+  it writes the new output to `written.received/` in the test output directory; check it, then copy it over the
+  snapshots:
+
+  ```bash
+  python3 -I tests/assets/verify_written.py tests/PictureSharp.Tiff.Tests/bin/Release/net10.0/written.received
   ```
 
 - `reference/tiff-4.5.1/` holds the libtiff sources the codecs are ported from (downloaded with the user's approval

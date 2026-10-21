@@ -1,6 +1,6 @@
 namespace PictureSharp.Formats.Tiff.Container;
 
-/// <summary>The TIFF 6.0 tags the decoder reads.</summary>
+/// <summary>The TIFF 6.0 tags the decoder reads and the encoder writes.</summary>
 internal static class TiffTag
 {
     public const ushort NewSubfileType = 254;
@@ -22,6 +22,7 @@ internal static class TiffTag
     public const ushort T4Options = 292;
     public const ushort T6Options = 293;
     public const ushort ResolutionUnit = 296;
+    public const ushort Software = 305;
     public const ushort Predictor = 317;
     public const ushort ColorMap = 320;
     public const ushort TileWidth = 322;

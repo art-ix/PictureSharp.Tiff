@@ -1,3 +1,5 @@
+PictureSharp.Formats.Tiff.TiffColorType
+PictureSharp.Formats.Tiff.TiffCompression
 PictureSharp.Formats.Tiff.TiffDecoderOptions
   Boolean Equals(PictureSharp.Formats.FormatDecoderOptions)
   Boolean Equals(PictureSharp.Formats.Tiff.TiffDecoderOptions)
@@ -11,16 +13,45 @@ PictureSharp.Formats.Tiff.TiffDecoderOptions
   System.String ToString()
   Void .ctor()
   Void set_Page(Int32)
+PictureSharp.Formats.Tiff.TiffEncoderOptions
+  Boolean Equals(PictureSharp.EncoderOptions)
+  Boolean Equals(PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  Boolean Equals(System.Object)
+  Boolean op_Equality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  Boolean op_Inequality(PictureSharp.Formats.Tiff.TiffEncoderOptions, PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  Int32 GetHashCode()
+  Int32 RowsPerStrip
+  Int32 get_RowsPerStrip()
+  PictureSharp.Formats.Tiff.TiffColorType ColorType
+  PictureSharp.Formats.Tiff.TiffColorType get_ColorType()
+  PictureSharp.Formats.Tiff.TiffCompression Compression
+  PictureSharp.Formats.Tiff.TiffCompression get_Compression()
+  PictureSharp.Formats.Tiff.TiffEncoderOptions <Clone>$()
+  PictureSharp.ImageFormat Format
+  PictureSharp.ImageFormat get_Format()
+  System.String ToString()
+  Void .ctor()
+  Void set_ColorType(PictureSharp.Formats.Tiff.TiffColorType)
+  Void set_Compression(PictureSharp.Formats.Tiff.TiffCompression)
+  Void set_RowsPerStrip(Int32)
 PictureSharp.Formats.Tiff.TiffFormat
   Boolean IsSupported(System.ReadOnlySpan`1[System.Byte])
   Int32 HeaderSize
   Int32 get_HeaderSize()
   PictureSharp.Formats.IImageFormatDecoder Decoder
   PictureSharp.Formats.IImageFormatDecoder get_Decoder()
+  PictureSharp.Formats.IImageFormatEncoder Encoder
+  PictureSharp.Formats.IImageFormatEncoder get_Encoder()
   PictureSharp.Formats.IImageFormatMetadataCodec MetadataCodec
   PictureSharp.Formats.IImageFormatMetadataCodec get_MetadataCodec()
   PictureSharp.ImageFormat Format
   PictureSharp.ImageFormat get_Format()
   Void .ctor()
+PictureSharp.Formats.Tiff.TiffImageExtensions
+  Byte[] ToTiff(PictureSharp.Image, PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  System.Threading.Tasks.Task SaveAsTiffAsync(PictureSharp.Image, System.IO.Stream, PictureSharp.Formats.Tiff.TiffEncoderOptions, System.Threading.CancellationToken)
+  System.Threading.Tasks.Task SaveAsTiffAsync(PictureSharp.Image, System.String, PictureSharp.Formats.Tiff.TiffEncoderOptions, System.Threading.CancellationToken)
+  Void SaveAsTiff(PictureSharp.Image, System.IO.Stream, PictureSharp.Formats.Tiff.TiffEncoderOptions)
+  Void SaveAsTiff(PictureSharp.Image, System.String, PictureSharp.Formats.Tiff.TiffEncoderOptions)
 PictureSharp.Formats.Tiff.TiffImageFormatExtensions
   PictureSharp.ImageFormat get_Tiff()

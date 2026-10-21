@@ -5,8 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). Next: writing in 0.4.1–0.4.4,
-released as 0.5.0.**
+**Status: 0.4.0 released 2026-10-21 (decoder with page selection; includes 0.3.1). 0.4.1 (writer foundation) done
+locally. Next: 0.4.2 lossless compression; writing is released as 0.5.0.**
 
 ## Versions
 
@@ -16,7 +16,7 @@ released as 0.5.0.**
 | 0.3.0 | Extended decoder | Released 2026-10-21 |
 | 0.3.1 | `Image.ReadMetadata` for TIFF (metadata codec, read only) | Released in 0.4.0 |
 | 0.4.0 | Page selection (`TiffDecoderOptions`) | Released 2026-10-21 |
-| 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Planned, local |
+| 0.4.1 | Writer foundation: uncompressed 8-bit strips, ICC, XMP, resolution | Done, local |
 | 0.4.2 | Lossless compression: PackBits, LZW, Deflate, predictor 2; palette and automatic colour type | Planned, local |
 | 0.4.3 | JPEG and CCITT Group 4 compression; bilevel output | Planned, local |
 | 0.4.4 | EXIF/GPS and orientation on write; `Image.EditMetadata` | Planned, local |
@@ -106,6 +106,15 @@ corpus, 618 tests.
 - `image.Save("x.tif")` chooses the encoder by extension; `SaveAsTiff`/`ToTiff`.
 - DoD: round trip for every colour type and odd sizes (1×1, widths not a multiple of 8, one-row strips); the three
   oracles; metadata round trip; non-seekable stream equals seekable output; cancellation; public API snapshot.
+- Done 2026-10-21. Decisions and deviations:
+  - `TiffColorType.Auto` already in 0.4.1 (grey, grey+alpha, RGB, RGBA); 0.4.2 adds palette to it. `TiffCompression`
+    has only `None` and is the default until LZW lands in 0.4.2. Enum values are added per milestone.
+  - `Software` is `PictureSharp.Tiff` without a version, so snapshots do not change with releases.
+  - Resolution is always written (inch), as the smallest power-of-ten rational up to 10^6 that reads back as the same
+    `float`. EXIF and orientation are not written before 0.4.4.
+  - Oracles run offline: `WrittenFileTests` compares the output with byte-exact snapshots in `tests/assets/written`
+    (with `written.json`), which `tests/assets/verify_written.py` checks with libtiff and Pillow. libtiff premultiplies
+    RGB with unassociated alpha but passes grey+alpha through (`putagreytile`), so the script compares accordingly.
 
 ### 0.4.2 — lossless compression
 
