@@ -5,19 +5,18 @@ z 2026-10-17). Osobne repozytorium i własny SemVer, jak `PictureSharp.Heif`. Za
 `PictureSharp` (minimum 0.7.8), bez kopii kodu rdzenia. Deflate przez `System.IO.Compression.ZLibStream` (decyzja
 użytkownika z 2026-10-17, zamiast wcześniej planowanej kopii `Inflater` rdzenia).
 
-**Status: 0.3.0 zaimplementowana lokalnie (2026-10-21), bez wydania; 0.2.0 w commicie `64ec003`.** Wersja 0.1.0 to
-szkielet projektu.
+**Status: 0.3.0 — pierwsze wydanie (2026-10-21, tag `v0.3.0`, GitHub Release, NuGet).** Wersje 0.1.0 (szkielet) i
+0.2.0 nie były wydawane osobno.
 
 ## Wersje
 
 | Wersja | Zakres | Status |
 | --- | --- | --- |
-| 0.1.0 | Szkielet: repo, CI, `TiffFormat` (rozpoznawanie TIFF/BigTIFF), dekoder zastępczy (`NotSupportedException`), testy architektury i API | Gotowa lokalnie, bez wydania |
-| 0.2.0 | TIFF podstawowy: IFD, paski i kafle, None/PackBits/LZW/Deflate, predyktor 2, gray/palette/RGB(A) 8/16 bit | Gotowa lokalnie, bez wydania |
-| 0.3.0 | TIFF rozszerzony: JPEG (7), CCITT G3/G4, predyktor 3 i float, CMYK, YCbCr, associated alpha, EXIF, BigTIFF | Gotowa lokalnie, bez wydania |
+| 0.1.0 | Szkielet: repo, CI, `TiffFormat` (rozpoznawanie TIFF/BigTIFF), dekoder zastępczy (`NotSupportedException`), testy architektury i API | Bez wydania |
+| 0.2.0 | TIFF podstawowy: IFD, paski i kafle, None/PackBits/LZW/Deflate, predyktor 2, gray/palette/RGB(A) 8/16 bit | Bez osobnego wydania |
+| 0.3.0 | TIFF rozszerzony: JPEG (7), CCITT G3/G4, predyktor 3 i float, CMYK, YCbCr, associated alpha, EXIF, BigTIFF | Wydana 2026-10-21 (pierwsze wydanie) |
 
-Szkieletu 0.1.0 nie należy publikować na NuGet: pakiet rozpoznaje TIFF, ale go nie dekoduje. Pierwsze wydanie to 0.2.0
-lub od razu 0.3.0 (do decyzji użytkownika).
+Decyzja użytkownika (2026-10-21): pierwszym wydaniem jest od razu 0.3.0; 0.1.0 i 0.2.0 nie trafiają na NuGet.
 
 ## 0.2.0 — TIFF podstawowy
 
@@ -76,6 +75,7 @@ lub od razu 0.3.0 (do decyzji użytkownika).
   przy zapisie i odczycie (wyrocznią jest odczyt libtiff, który port odtwarza bit w bit).
 - Paski i kafle JPEG przez `DecodeEmbeddedPart` (rdzeń 0.7.8): każdy w limicie rozmiaru paska/kafla, bez doliczania do
   `MaxPixels` obrazu; JPEG większy niż jego pasek lub kafel → `ImageFormatException`. Minimum PictureSharp 0.7.8.
+- Wydanie: `docs/releases/release-0.3.0.md`, `PackageReleaseNotes`.
 
 ## Zgłoszenia do rdzenia
 

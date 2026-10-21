@@ -2,7 +2,7 @@
 
 PictureSharp.Tiff is a format plugin for [PictureSharp](https://github.com/art-ix/PictureSharp) that will read TIFF
 entirely in C#. It is a separate repository and package with its own version; it uses PictureSharp only through its
-public NuGet API. Version 0.3.0 (extended TIFF) is implemented locally and not released yet; 0.2.0 is committed.
+public NuGet API. Version 0.3.0 (extended TIFF) is the first release.
 
 Before starting, read [plan.md](plan.md) to identify the current version and its definition of done (DoD), then read
 the latest entries in `progres.md` if it exists. Append progress after significant steps and before ending a session.
