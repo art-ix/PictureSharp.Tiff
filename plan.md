@@ -8,7 +8,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
 (see "Next: 0.6.1–1.0.0"): 0.7.0 released 2026-10-22 (real-world files, with the 0.6.1 housekeeping); 0.7.1
-(platforms) next.**
+(platforms) done, not released; 0.7.2 (fuzzing) next.**
 
 ## Versions
 
@@ -32,7 +32,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Released in 0.7.0 |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Released 2026-10-22 |
-| 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Planned |
+| 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Done, not released |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
@@ -756,6 +756,21 @@ Progress 2026-10-22:
 - Big-endian hosts are not available; the code paths that depend on host order (`TiffPixelScan` vector path) fall back
   to scalar code there, which the tests cover with `Vector.IsHardwareAccelerated` off (`DOTNET_EnableHWIntrinsic=0`).
 - DoD: green on all platforms; any platform difference fixed or documented.
+
+Done 2026-10-22, not released. Decisions and deviations:
+- CI (`ci.yml`, also run by the release workflow): `managed` on Ubuntu as before; `platforms` builds and runs every
+  test on `windows-latest` and `macos-latest` (arm64); `aot` publishes `tests/AotConsumer` (Native AOT, project
+  reference, not in the solution) on Ubuntu, Windows and macOS and decodes every page of `reference.json` on one
+  thread and in parallel: 316 decodes, 0 mismatches, no trim or AOT warnings. `.gitattributes` marks the binary
+  assets so Windows checkouts keep their bytes.
+- The Deflate snapshots were already exempt from the byte comparison; no other test depended on the platform.
+- One fix: `Cancel_StopsWithinAStripPerThread(-1)` failed on the 3-core macOS runner. `CancelAfter`'s callback runs
+  on the thread pool, which the parallel decode keeps busy, so the cancellation arrived after the decode finished;
+  it now comes from a dedicated thread (5/5 runs on 3 cores with `taskset`, 3/3 on ARM64).
+- ARM64 on the Orange Pi 5 (RK3588, .NET 10.0.113, copy in `~/pstiff-0.7.1`): 3824/3824 tests including the 840
+  external ones (libtiff rasters made on x64), and 3824/3824 again with `DOTNET_EnableHWIntrinsic=0` (scalar
+  fallback of `TiffPixelScan` and the core's vector code); a linux-arm64 Native AOT consumer decodes 27 files
+  identically to x64 JIT. No platform differences.
 
 ### 0.7.2 — fuzzing
 

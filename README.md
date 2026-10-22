@@ -38,7 +38,8 @@ Other pages, JPEG compression and tiles are covered in the guides below.
 Pixels match libtiff 4.5.1 and Pillow 10.2.0.
 
 **Status:** ready for use and tested against libtiff and Pillow, but before 1.0 the API may still change and some
-real-world files may still fail; please report them with the file attached. Tested on linux-x64.
+real-world files may still fail; please report them with the file attached. Tested on Linux (x64 and ARM64),
+Windows and macOS.
 
 Guides: [decoding](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/decoding.md) ·
 [encoding](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/encoding.md) ·
