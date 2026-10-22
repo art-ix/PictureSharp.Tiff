@@ -12,7 +12,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/art-ix/PictureSharp.Tiff</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.7.0: checked against 420 real-world TIFF files; reads more of what libtiff reads (strip arrays as libtiff reads them, predictor 2 for floating point, palette with alpha, Group 4 palettes), YCbCr tags as libtiff reads them, EditMetadata fixes for IFD loops and truncated files; earlier files decode unchanged. Requires PictureSharp 0.7.10. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.7.0/docs/releases/release-0.7.0.md</PackageReleaseNotes>
+    <PackageReleaseNotes>0.7.1: reads NeXT and ThunderScan compression (ports of libtiff); tested on Linux x64 and ARM64, Windows and macOS, with Native AOT; earlier files decode unchanged. Requires PictureSharp 0.7.10. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.7.1/docs/releases/release-0.7.1.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

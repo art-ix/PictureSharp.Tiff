@@ -148,11 +148,11 @@ Every corpus file (written by libtiff 4.5.1 and ImageMagick 6, both byte orders,
 to the pixels of Pillow 10.2.0, of libtiff `TIFFReadRGBAImage` where its conversion is exact, or of the rules above;
 every page of the multi-page files is checked. The corpus is regenerated with `tests/assets/generate_corpus.py`.
 
-Real-world files (0.7.0, not committed): 420 files from libtiff's test images and `pics-3.8.0`, GDAL 3.9.0's
-autotest data, Pillow 10.2.0's test images and ExifTool 12.76 (466 IFDs). Every page libtiff converts cleanly
-decodes to its `TIFFReadRGBAImage` raster, exactly or within the rounding differences above (329 exact with NeXT
-and ThunderScan, 35 within 1); 56 pages libtiff does not convert (other depths, floating point, 16-bit CMYK) match the rules above applied to
-the samples libtiff decodes. Files libtiff rejects or decodes only with errors throw `ImageFormatException` or
-`NotSupportedException` here; 16 pages that libtiff converts use a feature listed as not supported (old-style JPEG,
-LogLuv, Zstandard, LZMA, LERC, JPEG with contiguous alpha). `Image.EditMetadata` leaves every
-page of the 396 editable files decoding as before, in this decoder and in libtiff.
+Real-world files (0.7.0 and 0.7.1, not committed): 420 files from libtiff's test images and `pics-3.8.0`, GDAL 3.9.0's
+autotest data, Pillow 10.2.0's test images and ExifTool 12.76 (466 IFDs). Every page libtiff converts cleanly decodes
+to its `TIFFReadRGBAImage` raster, exactly or within the rounding differences above (329 exact with NeXT and
+ThunderScan, 35 within 1); 56 pages libtiff does not convert (other depths, floating point, 16-bit CMYK) match the
+rules above applied to the samples libtiff decodes. Files libtiff rejects or decodes only with errors throw
+`ImageFormatException` or `NotSupportedException` here; 16 pages that libtiff converts use a feature listed as not
+supported (old-style JPEG, LogLuv, Zstandard, LZMA, LERC, JPEG with contiguous alpha). `Image.EditMetadata` leaves
+every page of the 396 editable files decoding as before, in this decoder and in libtiff.
