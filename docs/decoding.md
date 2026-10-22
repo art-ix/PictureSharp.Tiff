@@ -48,7 +48,7 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
 LogLuv, CIE Lab, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
-contiguous 8-bit greyscale, RGB or YCbCr (so no alpha), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
+contiguous 8-bit greyscale, RGB, YCbCr or CMYK (so no alpha), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
 other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
 
@@ -72,7 +72,10 @@ other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`).
 Each JPEG or WebP strip or tile is a complete stream that the configuration's own JPEG or WebP codec decodes (through
 `ImageDecodeContext.DecodeEmbeddedPart`), within the strip's or tile's size. `JPEGTables` shared by the strips are
 merged into each stream as libtiff does. JPEG output therefore matches the PictureSharp JPEG decoder exactly and libjpeg
-within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy included.
+within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy included. CMYK JPEG strips (photometric 5)
+hold ink amounts, as libtiff writes them, and are decoded with `JpegCmykStorage.Plain` (PictureSharp 0.7.10), not with
+the inverted Adobe polarity of standalone CMYK JPEG files; their RGB follows the same Pillow `cmyk2rgb` rule as
+uncompressed CMYK, within 1 of libtiff's `TIFFReadRGBAImage`.
 
 ## Options and limits
 

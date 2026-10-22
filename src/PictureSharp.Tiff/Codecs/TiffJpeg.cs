@@ -1,3 +1,4 @@
+using PictureSharp.Formats.Jpeg;
 using PictureSharp.Formats.Tiff.Container;
 
 namespace PictureSharp.Formats.Tiff.Codecs;
@@ -5,16 +6,21 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// <summary>
 /// JPEG compression (7). Each strip or tile is an abbreviated JPEG stream whose tables may live in the JPEGTables tag;
 /// the two are joined into one interchange stream and decoded by the configuration's JPEG codec through
-/// <see cref="ImageDecodeContext.DecodeEmbeddedPart"/>, which also does the YCbCr conversion and chroma upsampling.
-/// A chunk may not decode to more than its strip or tile size and is not charged against the reserved image.
+/// <see cref="ImageDecodeContext.DecodeEmbeddedPart(ReadOnlyMemory{byte}, int, int, EmbeddedPartOptions)"/>, which also does the YCbCr conversion and chroma upsampling.
+/// A chunk may not decode to more than its strip or tile size and is not charged against the reserved image. CMYK
+/// (photometric 5) strips hold ink amounts, as libtiff writes them, so they are decoded with
+/// <see cref="JpegCmykStorage.Plain"/> rather than the Adobe polarity standalone JPEG files use.
 /// </summary>
 internal sealed class TiffJpeg
 {
     // An Adobe APP14 segment with transform 0: the three components are RGB, not YCbCr.
     private static readonly byte[] AdobeRgb = [0xFF, 0xEE, 0x00, 0x0E, (byte)'A', (byte)'d', (byte)'o', (byte)'b', (byte)'e', 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00];
 
+    private static readonly EmbeddedPartOptions PlainCmyk = new() { Jpeg = new JpegDecoderOptions { CmykStorage = JpegCmykStorage.Plain } };
+
     private readonly byte[] tables;
     private readonly bool rgb;
+    private readonly EmbeddedPartOptions part;
     private readonly int chunkWidth;
     private readonly int chunkHeight;
 
@@ -29,11 +35,13 @@ internal sealed class TiffJpeg
         // The tables stream without its EOI; an empty array when the strips carry their own tables.
         tables = stored.IsEmpty ? [] : stored[..^2].ToArray();
         rgb = layout.Photometric == TiffLayout.Rgb;
+        part = layout.Photometric == TiffLayout.Separated ? PlainCmyk : new EmbeddedPartOptions();
         (chunkWidth, chunkHeight) = (layout.ChunkWidth, layout.ChunkHeight);
     }
 
     // port: libtiff/tif_jpeg.c JPEGPreDecode: the tables are read before the strip's own stream, and RGB photometric
-    // data is taken as RGB (libtiff sets jpeg_color_space to JCS_RGB) whatever the stream says.
+    // data is taken as RGB (libtiff sets jpeg_color_space to JCS_RGB) whatever the stream says. Four components stay
+    // as libjpeg decodes them (CMYK, or YCCK converted to CMYK), which TIFF reads as ink amounts.
     public void Decode(ReadOnlyMemory<byte> raw, ImageDecodeContext context, int width, int rows, Span<Rgba32> pixels, int stride)
     {
         ReadOnlySpan<byte> strip = raw.Span;
@@ -61,7 +69,7 @@ internal sealed class TiffJpeg
             stream = joined;
         }
 
-        using Image image = context.DecodeEmbeddedPart(stream, chunkWidth, chunkHeight);
+        using Image image = context.DecodeEmbeddedPart(stream, chunkWidth, chunkHeight, part);
         if (image.Width < width || image.Height < rows)
         {
             throw TiffDecoder.Error($"A TIFF JPEG strip or tile decodes to {image.Width}x{image.Height}, smaller than its {width}x{rows} pixels.");

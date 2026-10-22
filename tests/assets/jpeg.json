@@ -1,4 +1,69 @@
 {
+ "jpeg_cmyk_strips.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_cmyk_strips.0.jpg",
+    0,
+    0,
+    64,
+    16
+   ],
+   [
+    "jpeg/jpeg_cmyk_strips.1.jpg",
+    0,
+    16,
+    64,
+    16
+   ],
+   [
+    "jpeg/jpeg_cmyk_strips.2.jpg",
+    0,
+    32,
+    64,
+    16
+   ]
+  ],
+  "pillow": "jpeg/jpeg_cmyk_strips.pillow.png",
+  "cmyk": true
+ },
+ "jpeg_cmyk_tiles_be.tif": {
+  "width": 64,
+  "height": 48,
+  "chunks": [
+   [
+    "jpeg/jpeg_cmyk_tiles_be.0.jpg",
+    0,
+    0,
+    32,
+    32
+   ],
+   [
+    "jpeg/jpeg_cmyk_tiles_be.1.jpg",
+    32,
+    0,
+    32,
+    32
+   ],
+   [
+    "jpeg/jpeg_cmyk_tiles_be.2.jpg",
+    0,
+    32,
+    32,
+    16
+   ],
+   [
+    "jpeg/jpeg_cmyk_tiles_be.3.jpg",
+    32,
+    32,
+    32,
+    16
+   ]
+  ],
+  "pillow": "jpeg/jpeg_cmyk_tiles_be.pillow.png",
+  "cmyk": true
+ },
  "jpeg_gray_be.tif": {
   "width": 64,
   "height": 48,

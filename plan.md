@@ -545,6 +545,15 @@ Ordered by how often the features appear in real files. Each milestone extends t
   merged) and CMYK JPEG (photometric 5, four components, as Photoshop writes). Checked 2026-10-21: the core returns
   Adobe-inverted CMYK as RGB, wrong for TIFF; CMYK JPEG waits for the core request (see "Core requests"), planar JPEG
   can go ahead. JPEG with alpha stays unsupported, as in libtiff.
+  - CMYK JPEG done 2026-10-22 (uncommitted), on core 0.7.10 from a local feed (`reference/localfeed`, the core
+    package packed from commit ef351a4; restore with `-p:RestoreAdditionalProjectSources=$PWD/reference/localfeed`
+    until 0.7.10 is on NuGet; CI cannot restore it before then). `PictureSharpVersion` 0.7.10. `TiffLayout` accepts
+    JPEG with photometric 5 (4 contiguous 8-bit samples, InkSet 1); `TiffJpeg` decodes those strips with
+    `EmbeddedPartOptions { Jpeg = { CmykStorage = Plain } }`. The new `DecodeEmbeddedPart` overload made the plugin's
+    `cref`s ambiguous (CS0419 under `TreatWarningsAsErrors`); they name the overload now. Corpus: `jpeg_cmyk_strips`
+    and `jpeg_cmyk_tiles_be` (libtiff, no Adobe marker), `jpeg.json` marks them `cmyk` so `JpegTests` decodes the
+    standalone strips as plain; whole images within 1 of `TIFFReadRGBAImage`. 2653 tests pass.
+  - Left in 0.5.5: planar JPEG.
 - **Not planned:** LogLuv, PixarLog (HDR; no 8-bit-only use), transparency masks (photometric 4) as the main page,
   different `BitsPerSample` per sample, CMYK with other ink sets or premultiplied alpha, YCbCr deeper than 8 bits.
   They keep throwing `NotSupportedException`.
@@ -565,6 +574,9 @@ Ordered by how often the features appear in real files. Each milestone extends t
   file: up to 255 off `TIFFReadRGBAImage` (mean 102), and not recoverable from the RGB result. Requested in the core
   `plan.md` (2026-10-21): format options for `DecodeEmbeddedPart` and a `JpegDecoderOptions` CMYK storage setting
   (plain or Adobe-inverted), optionally the part's degree of parallelism. Planar JPEG does not depend on it.
+  Implemented in core 0.7.10 (2026-10-22, not released yet): `DecoderOptions.Jpeg.CmykStorage = JpegCmykStorage.Plain`
+  and `DecodeEmbeddedPart(data, width, height, EmbeddedPartOptions)` with `Jpeg` and `MaxDegreeOfParallelism`; a libtiff
+  CMYK strip decodes within 1 of `TIFFReadRGBAImage`. 0.5.5 uses it with a minimum PictureSharp of 0.7.10.
 - To check during 0.5.0: a frame-writer SPI for plugins (`Image.CreateFrameWriter` supports only GIF, APNG and WebP),
   which would allow writing multi-page TIFF page by page without holding every frame. Report to the core `plan.md` if
   needed.

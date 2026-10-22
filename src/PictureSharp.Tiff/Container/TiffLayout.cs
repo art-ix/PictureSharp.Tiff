@@ -267,9 +267,9 @@ internal sealed class TiffLayout
         }
 
         if (IsJpeg && (BitsPerSample != 8 || SampleFormat != FormatUnsigned || Separate || SamplesPerPixel != ColorSamples
-            || Photometric is not (BlackIsZero or Rgb or YCbCr)))
+            || Photometric is not (BlackIsZero or Rgb or YCbCr or Separated)))
         {
-            throw new NotSupportedException($"JPEG-compressed TIFF images are only supported as contiguous 8-bit greyscale, RGB or YCbCr, not photometric {Photometric} with {SamplesPerPixel} samples.");
+            throw new NotSupportedException($"JPEG-compressed TIFF images are only supported as contiguous 8-bit greyscale, RGB, YCbCr or CMYK, not photometric {Photometric} with {SamplesPerPixel} samples.");
         }
 
         // port: libtiff/tif_webp.c TWebPSetupDecode, TWebPFixupTags and TWebPPreDecode reject these as errors.

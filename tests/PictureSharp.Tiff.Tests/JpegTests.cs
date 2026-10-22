@@ -15,6 +15,9 @@ public sealed class JpegTests
 
     public static IEnumerable<string> Files() => Index.Keys.Order(StringComparer.Ordinal);
 
+    private static readonly DecoderOptions PlainCmyk =
+        TestSupport.Options with { Jpeg = new JpegDecoderOptions { CmykStorage = JpegCmykStorage.Plain } };
+
     [Test]
     [MethodDataSource(nameof(Files))]
     public async Task Decode_MatchesCoreJpegDecodeOfEachChunk(string name)
@@ -27,7 +30,8 @@ public sealed class JpegTests
         foreach (JsonElement[] chunk in entry.Chunks)
         {
             (string file, int x0, int y0, int w, int h) = (chunk[0].GetString()!, chunk[1].GetInt32(), chunk[2].GetInt32(), chunk[3].GetInt32(), chunk[4].GetInt32());
-            using Image jpeg = TestSupport.Load(TestSupport.ReadCorpus(file));
+            // CMYK strips hold ink amounts; a standalone JPEG decoder assumes Adobe's inverted values unless told.
+            using Image jpeg = TestSupport.Load(TestSupport.ReadCorpus(file), entry.Cmyk ? PlainCmyk : null);
             Rgba32[] decoded = jpeg.GetPixelSpan().ToArray();
             for (int y = 0; y < h; y++)
             {
@@ -89,5 +93,5 @@ public sealed class JpegTests
         await Assert.That(error.Format).IsSameReferenceAs(ImageFormat.Jpeg);
     }
 
-    private sealed record JpegEntry(int Width, int Height, JsonElement[][] Chunks, string Pillow);
+    private sealed record JpegEntry(int Width, int Height, JsonElement[][] Chunks, string Pillow, bool Cmyk = false);
 }

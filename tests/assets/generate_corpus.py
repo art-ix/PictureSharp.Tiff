@@ -795,6 +795,12 @@ def cases_030():
     yield "jpeg_rgb", [dict(samples=big, bits=8, photometric="rgb", compression="jpeg", jpeg_quality=95, rows_per_strip=8)], {}, "jpeg"
     gray_big = (big.astype(np.int64) @ [299, 587, 114] // 1000).astype(np.uint8)
     yield "jpeg_gray_be", [dict(samples=s(gray_big), bits=8, photometric="minisblack", compression="jpeg", rows_per_strip=24)], dict(big_endian=True), "jpeg"
+    # 0.5.5 CMYK JPEG: libtiff writes four-component strips without an Adobe marker, holding plain ink amounts.
+    ink = (255 - big).astype(np.int64)
+    k = ink.min(-1) * 2 // 3
+    cmyk_big = np.dstack([ink - k[..., None], k]).astype(np.uint8)
+    yield "jpeg_cmyk_strips", [dict(samples=cmyk_big, bits=8, photometric="cmyk", compression="jpeg", jpeg_quality=90, rows_per_strip=16)], {}, "jpeg"
+    yield "jpeg_cmyk_tiles_be", [dict(samples=cmyk_big, bits=8, photometric="cmyk", compression="jpeg", tile=(32, 32))], dict(big_endian=True), "jpeg"
 
     # 0.4.5 WebP (libtiff tif_webp.c with the system libwebp): lossy and lossless, RGB and RGBA, strips and tiles.
     big_rgba = np.dstack([big, alpha(64, 48)])
@@ -1023,6 +1029,9 @@ def main():
                 Image.fromarray(np.asarray(im.convert("RGBA"))).save(os.path.join(CORPUS, f"jpeg/{name}.pillow.png"))
             jpeg_index[f"{name}.tif"] = dict(width=int(smp.shape[1]), height=int(smp.shape[0]), chunks=chunks,
                                              pillow=f"jpeg/{name}.pillow.png")
+            if page["photometric"] == "cmyk":
+                # The standalone strips are plain CMYK, which a JPEG decoder reads with JpegCmykStorage.Plain.
+                jpeg_index[f"{name}.tif"]["cmyk"] = True
 
     # libtiff 4.5.1 writes big-endian predictor-3 files with the byte planes in host order and cannot read them back,
     # so this one is written here as the specification describes.

@@ -4,7 +4,7 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 
 /// <summary>
 /// WebP compression (50001, libtiff's <c>tif_webp.c</c>). Each strip or tile is a complete WebP stream decoded by the
-/// configuration's WebP codec through <see cref="ImageDecodeContext.DecodeEmbeddedPart"/>; its RGB or RGBA values become
+/// configuration's WebP codec through <see cref="ImageDecodeContext.DecodeEmbeddedPart(ReadOnlyMemory{byte}, int, int)"/>; its RGB or RGBA values become
 /// the chunk's contiguous 8-bit samples, which the photometric and alpha rules then convert like any other chunk.
 /// </summary>
 internal static class TiffWebP
