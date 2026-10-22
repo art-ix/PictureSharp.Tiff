@@ -8,7 +8,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
 (see "Next: 0.6.1–1.0.0"): 0.7.0 released 2026-10-22 (real-world files, with the 0.6.1 housekeeping); 0.7.1
-(platforms, NeXT and ThunderScan) done, not released; 0.7.2 (fuzzing) next.**
+(platforms, NeXT and ThunderScan) released 2026-10-22; 0.7.2 (fuzzing) next.**
 
 ## Versions
 
@@ -32,7 +32,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Released in 0.7.0 |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Released 2026-10-22 |
-| 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Done, not released |
+| 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Released 2026-10-22 |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
@@ -757,7 +757,7 @@ Progress 2026-10-22:
   to scalar code there, which the tests cover with `Vector.IsHardwareAccelerated` off (`DOTNET_EnableHWIntrinsic=0`).
 - DoD: green on all platforms; any platform difference fixed or documented.
 
-Done 2026-10-22, not released. Decisions and deviations:
+Released 2026-10-22. Decisions and deviations:
 - CI (`ci.yml`, also run by the release workflow): `managed` on Ubuntu as before; `platforms` builds and runs every
   test on `windows-latest` and `macos-latest` (arm64); `aot` publishes `tests/AotConsumer` (Native AOT, project
   reference, not in the solution) on Ubuntu, Windows and macOS and decodes every page of `reference.json` on one
@@ -770,7 +770,11 @@ Done 2026-10-22, not released. Decisions and deviations:
 - ARM64 on the Orange Pi 5 (RK3588, .NET 10.0.113, copy in `~/pstiff-0.7.1`): 3824/3824 tests including the 840
   external ones (libtiff rasters made on x64), and 3824/3824 again with `DOTNET_EnableHWIntrinsic=0` (scalar
   fallback of `TiffPixelScan` and the core's vector code); a linux-arm64 Native AOT consumer decodes 27 files
-  identically to x64 JIT. No platform differences.
+  identically to x64 JIT. No platform differences. Rerun on the release state with NeXT and ThunderScan:
+  3863/3863 with and without intrinsics.
+- The release commit first failed on Ubuntu: the canceling thread of `Cancel_StopsWithinAStripPerThread` slept
+  while every core decoded, woke after the decode, and then cancelled a disposed source, which crashed the test
+  host. It now spins on the clock and is joined in `finally` (10/10 runs on 4 cores).
 - **NeXT (32766) and ThunderScan (32809)**, moved here from the 0.8.0 candidates (user decision, 2026-10-22): ports of `tif_next.c` and `tif_thunder.c` (`NeXTDecoder`,
   `ThunderScanDecoder`), 2-bit and 4-bit with one sample per pixel, ThunderScan in strips only (libtiff counts the
   image width). libtiff has no encoders, so the generator has its own (`next_encode`, `thunder_encode`, every code
