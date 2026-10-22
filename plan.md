@@ -5,7 +5,7 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.6.0 prepared, not released (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
+**Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". 0.5.2 released 2026-10-21.**
 
 ## Versions
@@ -24,10 +24,10 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.5.0 | Multi-page output, tiles, BigTIFF, parallel compression; release with writing | Released 2026-10-21 |
 | 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Released 2026-10-21 |
 | 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Released 2026-10-21 |
-| 0.5.3 | Reading: more sample formats and bit depths | Implemented, released in 0.6.0 |
-| 0.5.4 | Reading: CIELab | Implemented, released in 0.6.0 |
-| 0.5.5 | Reading: JPEG variants (planar, CMYK) | Implemented, released in 0.6.0 |
-| 0.6.0 | Release of the reading gaps | Planned |
+| 0.5.3 | Reading: more sample formats and bit depths | Released in 0.6.0 |
+| 0.5.4 | Reading: CIELab | Released in 0.6.0 |
+| 0.5.5 | Reading: JPEG variants (planar, CMYK) | Released in 0.6.0 |
+| 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
@@ -626,7 +626,9 @@ Progress:
   publishes without warnings and decodes 12 files of every new kind (12-, 32-bit and signed integers, half and double
   floats, CIE L*a*b* 8/16, planar JPEG with alpha and YCbCr, CMYK JPEG, and an earlier LZW file) at degrees 1 and -1:
   identical to the JIT run, and the 22 results in `reference.json` match. 2786 tests pass after the version change.
-- Left: step 5 (commit, push, CI, tag `v0.6.0`, GitHub Release), on the user's go-ahead.
+- Step 5 done 2026-10-22: release files committed (b779148) and pushed with 0.5.3–0.5.5; CI 39740648491 success;
+  annotated tag `v0.6.0`; GitHub Release "PictureSharp.Tiff 0.6.0" (notes without the H1, link to `blob/v0.6.0`);
+  Release workflow 39740792253 success (validate, publish), `.nupkg` attached, 0.6.0 listed on nuget.org.
 
 Open decisions: release core 0.7.10 now (it only adds API); skip ARM64 again (no platform-specific code in either
 change); whether the benchmark rerun belongs to the release notes.
