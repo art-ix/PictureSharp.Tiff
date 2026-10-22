@@ -12,7 +12,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/art-ix/PictureSharp.Tiff</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.5.2: faster automatic colour type when writing (one vectorized pass over the pixels, about 8 ms instead of 30 ms per 24 MP); written files are byte-identical to 0.5.1. Requires PictureSharp 0.7.9. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.5.2/docs/releases/release-0.5.2.md</PackageReleaseNotes>
+    <PackageReleaseNotes>0.6.0: reads more TIFF variants: integer samples of 1 to 16 and 32 bits (also signed), 16- and 64-bit floating point, CIE L*a*b* (as libtiff converts it), CMYK JPEG and planar JPEG; earlier files decode unchanged. Requires PictureSharp 0.7.10. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.6.0/docs/releases/release-0.6.0.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

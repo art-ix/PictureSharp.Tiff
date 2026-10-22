@@ -5,9 +5,8 @@ repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `Pic
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
-**Status: 0.5.1 released 2026-10-21 (parallel reading, 8-bit fast paths, row bands). 0.5.2 released 2026-10-21
-(vectorized Auto analysis; the ordered pipeline is deferred). 0.5.3 implemented (uncommitted); next 0.5.4 CIELab.
-CMYK JPEG (0.5.5) waits for a core request.**
+**Status: 0.6.0 prepared, not released (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
+JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". 0.5.2 released 2026-10-21.**
 
 ## Versions
 
@@ -579,6 +578,58 @@ Ordered by how often the features appear in real files. Each milestone extends t
   They keep throwing `NotSupportedException`.
 - **0.6.0 release:** all three milestones' DoDs; corpus and fuzz tests over the new files; `docs/decoding.md` support
   table, release notes, `PackageReleaseNotes`; Native AOT consumer reads the new files.
+
+### 0.6.0 — release plan (2026-10-22)
+
+0.5.3 (sample formats), 0.5.4 (CIE L*a*b*) and 0.5.5 (CMYK and planar JPEG) are committed locally (05f4589, de66516,
+9848a48, 95cc43f), not pushed. 0.5.5 needs PictureSharp 0.7.10 (`EmbeddedPartOptions`, `JpegCmykStorage.Plain`), committed
+in the core (ef351a4, 7b55b43) but not released; until it is on NuGet the plugin builds only from
+`reference/localfeed` and its CI cannot restore. Order:
+
+1. **Core 0.7.10** (gate already passed on linux-x64: build without warnings, 7306/7313 tests, Oracle 193/193,
+   `verify-package-consumer.sh`; no ARM64 run, no platform code):
+   - push `main` and wait for CI; annotated tag `v0.7.10`, pushed;
+   - GitHub Release "PictureSharp 0.7.10" from `docs/releases/release-0.7.10.md` without its H1, the two relative
+     links rewritten to `https://github.com/art-ix/PictureSharp/blob/v0.7.10/docs/...`;
+   - the Release workflow publishes the four packages (and symbols) to NuGet; check the run and the assets;
+   - core `plan.md` and `progres.md`: 0.7.10 released.
+2. **Plugin on the published core:** once nuget.org serves PictureSharp 0.7.10, delete the local copy in
+   `~/.nuget/packages/picturesharp/0.7.10` (packed from ef351a4, the same code) and `reference/localfeed`, restore
+   from nuget.org only, then build without warnings and run every test (Slow included); rerun
+   `verify_written.py` on `written.corpus` and `written.edited`; rerun the 24 MP decode benchmark to confirm the
+   0.5.1 figures still hold after the converter changes (document only if they moved).
+3. **Release files:** `VERSION` 0.6.0; `docs/releases/release-0.6.0.md` (new sample formats and depths with their
+   rounding, CIE L*a*b* and its D50 note, CMYK and planar JPEG; requires PictureSharp 0.7.10; no breaking changes;
+   validation); `PackageReleaseNotes`; README and `docs/decoding.md` checked against the code; AGENTS.md mentions
+   0.6.0; `plan.md` status.
+4. **Native AOT:** pack 0.6.0 into a scratch feed; a `PublishAot` consumer (TreatWarningsAsErrors) decodes one file of
+   each new kind (12-bit, 32-bit and signed integers, half and double floats, CIE L*a*b* 8/16, CMYK JPEG, planar JPEG
+   with alpha) and the earlier combinations, without trim or AOT warnings.
+5. **Publish:** commit the release files; push `main` (CI must pass against 0.7.10 from NuGet); annotated tag
+   `v0.6.0`; GitHub Release "PictureSharp.Tiff 0.6.0" from the notes without the H1, links absolute to
+   `blob/v0.6.0`; the Release workflow (CI, tests, NuGet Trusted Publishing) attaches the `.nupkg`; check it.
+6. **After:** core README footnote ² stays valid (TIFF read and write); optionally mention the new read support there.
+   Remove the local feed note from this plan.
+
+Progress:
+
+- Step 1 done 2026-10-22: core 0.7.10 released (Validate 39738074767, Release 39738595140, 4 packages and symbols on
+  NuGet; no ARM64, by the user's decision).
+- Step 2 done 2026-10-22: the local package and `reference/localfeed` deleted; PictureSharp 0.7.10 restored from
+  nuget.org. Build without warnings; 2786/2786 tests (Slow included); `verify_written.py`: snapshots 62/62,
+  re-encoded corpus 952/952, edited corpus 136/136. 24 MP decode, 1 / 16 threads: None 28 / 10 ms, LZW 367 / 46 ms,
+  Deflate 343 / 40 ms; an A/B run of uncompressed decoding against v0.5.2 on the same machine gave 26.1–26.2 ms
+  against 26.4–28.0 ms, so the 0.5.1 figures in `docs/decoding.md` stand (machine variance, no regression).
+- Steps 3–4 done 2026-10-22 (uncommitted): `VERSION` 0.6.0, `docs/releases/release-0.6.0.md`, `PackageReleaseNotes`,
+  AGENTS.md (0.6.0 line); README and `docs/decoding.md` checked against `TiffLayout` (the unsupported list rewrapped).
+  Native AOT: the packed 0.6.0 package (scratch feed) in a `PublishAot` consumer with `TreatWarningsAsErrors`
+  publishes without warnings and decodes 12 files of every new kind (12-, 32-bit and signed integers, half and double
+  floats, CIE L*a*b* 8/16, planar JPEG with alpha and YCbCr, CMYK JPEG, and an earlier LZW file) at degrees 1 and -1:
+  identical to the JIT run, and the 22 results in `reference.json` match. 2786 tests pass after the version change.
+- Left: step 5 (commit, push, CI, tag `v0.6.0`, GitHub Release), on the user's go-ahead.
+
+Open decisions: release core 0.7.10 now (it only adds API); skip ARM64 again (no platform-specific code in either
+change); whether the benchmark rerun belongs to the release notes.
 
 ## Core requests
 

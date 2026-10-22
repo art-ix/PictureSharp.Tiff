@@ -48,9 +48,11 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | Alpha | `ExtraSamples` associated (unpremultiplied) or unassociated, following Pillow's rules |
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
-LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
-8-bit greyscale, RGB, YCbCr or CMYK (alpha only with separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
-other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
+LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes, transparency masks, complex
+samples, integer samples of 17 to 31 or 64 bits, JPEG other than 8-bit greyscale, RGB, YCbCr or CMYK (alpha only with
+separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As
+in libtiff, WebP other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG,
+Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
 
 ### Conversion to 8 bits
