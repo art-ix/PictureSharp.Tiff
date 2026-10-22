@@ -6,7 +6,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
-JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". 0.5.2 released 2026-10-21.**
+JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Next: stabilization towards
+1.0 (see "Next: 0.6.1–1.0.0"), not started.**
 
 ## Versions
 
@@ -28,6 +29,13 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.5.4 | Reading: CIELab | Released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
+| 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Planned |
+| 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Planned (downloads need approval) |
+| 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Planned |
+| 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
+| 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
+| 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
+| 1.0.0 | Stable release on a stable core SPI | Planned |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
 public API and is released once, complete, in 0.5.0 (unless the user decides otherwise).
@@ -632,6 +640,96 @@ Progress:
 
 Open decisions: release core 0.7.10 now (it only adds API); skip ARM64 again (no platform-specific code in either
 change); whether the benchmark rerun belongs to the release notes.
+
+## Next: 0.6.1–1.0.0 — stabilization
+
+Planned 2026-10-22. 0.6.0 covers what mainstream software writes and is checked against libtiff 4.5.1 and Pillow
+10.2.0, but on a synthetic corpus (files libtiff and ImageMagick write from generated samples, plus one user scan), on
+linux-x64 only, with light random fuzzing, by a library two days old. 1.0 means: SemVer guarantees for the public API
+and for decoded pixels, validated on real files and on every supported platform, on a core whose plugin SPI is itself
+stable. The milestones below each end in a NuGet release unless noted; their order follows the risk they remove.
+
+### 0.6.1 — housekeeping
+
+- `docs/encoding.md` "Exactness": the corpus and file counts are those of 0.5.0 (91 images, 637 files); update them
+  from the test run (136 images, 952 re-encoded files) and keep them in one place.
+- `YCbCrToRgb` reads RATIONAL tags as `(float)(numerator / (double)denominator)`; libtiff converts with
+  `(float)numerator / (float)denominator` (`TiffDirectory.GetFloat`, used for CIE L\*a\*b\*). Switch, so that unusual
+  ReferenceBlackWhite or YCbCrCoefficients values cannot differ in the last bit; references must stay identical.
+- README: a short maturity note ("ready for use; the API may still change before 1.0"), and the core README footnote ²
+  mentions what 0.6.0 reads.
+- DoD: tests and `verify_written.py` unchanged; release notes. May be folded into 0.7.0 instead of its own release.
+
+### 0.7.0 — real-world files
+
+The largest risk: files from Photoshop, scanners, cameras, GIS tools and old archives use tag combinations, padding
+and deviations no synthetic corpus has.
+
+- **Sources** (each download only with the user's approval, into `tests/assets/external/`, never committed, with a
+  fetch script recording URL and SHA-256 like the core's `fetch-external.sh`): the libtiff test images (`pics-*`
+  archive), GDAL autotest TIFF data, ExifTool's sample images, the Pillow test suite's TIFF files, and the user's own
+  files (scanners, Photoshop, cameras, fax software).
+- **Oracle:** for every page libtiff can convert, `TIFFReadRGBAImage` (exact, or within the documented tolerances for
+  JPEG and CMYK); otherwise the samples from `TIFFReadEncodedStrip`/`Tile` through the model. A file libtiff rejects
+  must throw `ImageFormatException` or `NotSupportedException`, never another exception. Recorded per file in a
+  generated, uncommitted `external.json`; tests run as `Category=Local`.
+- **Triage:** every difference is classified as our bug (fix, add a minimal synthetic reproduction to the committed
+  corpus), a deliberate difference (document it in `docs/decoding.md`), or a libtiff quirk we do not copy (document).
+  Unsupported features that turn up often become candidates for 0.8.0 (old-style JPEG is the likely one).
+- **Metadata:** `ReadMetadata` and `EditMetadata` on the same files; libtiff must still decode every edited IFD.
+- DoD: every external file classified; no unexpected exception types; fixes released with regression files.
+
+### 0.7.1 — platforms
+
+- **ARM64:** full test run on the Orange Pi 5 (RK3588) as the core does (rsync a copy, .NET 10 SDK there), including
+  the parallel tests and the vectorized scan (`Vector<uint>` with NEON).
+- **CI:** Windows and macOS jobs next to Ubuntu (build, tests; Oracle steps stay on Ubuntu, where libtiff and Pillow
+  are installed). Deflate output may differ through the runtime's zlib; tests compare pixels, not Deflate bytes,
+  except the snapshots, which are written on Ubuntu (check how `WrittenFileTests` behaves elsewhere first).
+- **Native AOT** consumer on linux-arm64 and win-x64 if the runners allow.
+- Big-endian hosts are not available; the code paths that depend on host order (`TiffPixelScan` vector path) fall back
+  to scalar code there, which the tests cover with `Vector.IsHardwareAccelerated` off (`DOTNET_EnableHWIntrinsic=0`).
+- DoD: green on all platforms; any platform difference fixed or documented.
+
+### 0.7.2 — fuzzing
+
+- A coverage-guided campaign (SharpFuzz with libFuzzer or AFL++) in a separate tool project under `tools/` (packages
+  are allowed outside `src`), with entry points for `Load`, `Identify`, `ReadMetadata`, `EditMetadata` and the
+  encoder on decoded images; seeds from the committed and external corpora; at least several CPU-hours per target.
+- Contract: only `ImageFormatException`, `NotSupportedException` and cancellation escape; no hang (a time limit per
+  input), memory within `MaxPixels`/`MaxMetadataBytes` and the documented buffers.
+- Every finding gets a minimized file in the committed corpus and a regression test.
+- DoD: the campaign's duration, coverage and findings recorded here; all findings fixed.
+
+### 0.8.0 — scope of 1.0
+
+Decisions for the user before 1.0, each with its cost estimated here first:
+
+- **API review:** names, defaults and validation of `TiffEncoderOptions`, `TiffDecoderOptions`, `TiffColorType`,
+  `TiffCompression`, `TiffPredictor`, `TiffContainer`; what 1.0 promises (public types, exception types, decoded
+  pixels for supported files, byte-identical output for lossless compressions on one runtime).
+- **Reading candidates:** all pages as frames (today one page per call); SubIFDs (tag 330); old-style JPEG (6, see
+  Deferred), if 0.7.0 finds it in practice; ICC L\*a\*b\*.
+- **Writing candidates:** 16-bit samples, CMYK, planar output; the ordered pipeline deferred in 0.5.2.
+- **Performance:** a faster single-thread LZW decoder (363 against 268 ms for libtiff on 24 MP), which matters for
+  throughput on many files.
+- DoD: decisions recorded; the chosen features implemented and released as 0.8.x milestones.
+
+### 0.9.0 — release candidate
+
+- API frozen: `PublicApi.approved.txt` reviewed line by line; anything not meant to be permanent removed or made
+  internal before the freeze.
+- Compatibility policy written down (README and `docs/`): SemVer for the public API; pixel changes for supported
+  files only as bug fixes, called out in release notes; the minimum PictureSharp version and how it moves.
+- Documentation complete and checked against the code; benchmark rerun and documented.
+- Depends on the core: 1.0 builds on the core release whose plugin SPI is declared stable (the core is 0.7.x; its
+  0.8.0 changes the SPI). Request in the core `plan.md` a statement of which SPI members are stable.
+- DoD: a release candidate on NuGet (0.9.0 or 1.0.0-rc.1), no open issues from 0.7.x.
+
+### 1.0.0 — stable
+
+- The release candidate unchanged except fixes; release notes summarise the support matrix and the guarantees.
+- DoD: all gates of 0.7.0–0.9.0 green; tag, GitHub Release, NuGet.
 
 ## Core requests
 
