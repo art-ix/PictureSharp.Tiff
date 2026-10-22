@@ -48,7 +48,7 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
 LogLuv, CIE Lab, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
-contiguous 8-bit greyscale, RGB, YCbCr or CMYK (so no alpha), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
+8-bit greyscale, RGB, YCbCr or CMYK (alpha only with separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
 other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
 
@@ -75,7 +75,9 @@ merged into each stream as libtiff does. JPEG output therefore matches the Pictu
 within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy included. CMYK JPEG strips (photometric 5)
 hold ink amounts, as libtiff writes them, and are decoded with `JpegCmykStorage.Plain` (PictureSharp 0.7.10), not with
 the inverted Adobe polarity of standalone CMYK JPEG files; their RGB follows the same Pillow `cmyk2rgb` rule as
-uncompressed CMYK, within 1 of libtiff's `TIFFReadRGBAImage`.
+uncompressed CMYK, within 1 of libtiff's `TIFFReadRGBAImage`. Planar JPEG (PlanarConfiguration 2) stores every plane
+as a one-component JPEG, decoded without colour conversion and then converted like uncompressed planar samples, so a
+plane may also hold alpha; a plane with more than one component is an error (`ImageFormatException`), as in libtiff.
 
 ## Options and limits
 

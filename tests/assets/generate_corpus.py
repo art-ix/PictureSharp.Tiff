@@ -663,6 +663,31 @@ def source_bytes(page):
     return bytes(out)
 
 
+def planar_samples(page, chunks):
+    """The (h, w, spp) samples of a planar 8-bit page from its decoded chunks (libtiff_bytes), plane after plane."""
+    h, w, spp = page["samples"].shape
+    out = np.zeros((h, w, spp), np.uint8)
+    data = np.frombuffer(chunks, np.uint8)
+    at = 0
+    for p in range(spp):
+        if page.get("tile"):
+            tw, tl = page["tile"]
+            for ty in range(-(-h // tl)):
+                for tx in range(-(-w // tw)):
+                    tile = data[at:at + tw * tl].reshape(tl, tw)
+                    at += tw * tl
+                    region = out[ty * tl:(ty + 1) * tl, tx * tw:(tx + 1) * tw, p]
+                    region[...] = tile[:region.shape[0], :region.shape[1]]
+        else:
+            rps = page.get("rows_per_strip") or h
+            for y in range(0, h, rps):
+                rows = min(rps, h - y)
+                out[y:y + rows, :, p] = data[at:at + rows * w].reshape(rows, w)
+                at += rows * w
+    assert at == len(data)
+    return out
+
+
 def float_to8(v, t=np.float32):
     v = v.astype(t)
     scaled = np.floor(np.clip(v, 0, 1) * t(255) + t(0.5))
@@ -801,6 +826,13 @@ def cases_030():
     cmyk_big = np.dstack([ink - k[..., None], k]).astype(np.uint8)
     yield "jpeg_cmyk_strips", [dict(samples=cmyk_big, bits=8, photometric="cmyk", compression="jpeg", jpeg_quality=90, rows_per_strip=16)], {}, "jpeg"
     yield "jpeg_cmyk_tiles_be", [dict(samples=cmyk_big, bits=8, photometric="cmyk", compression="jpeg", tile=(32, 32))], dict(big_endian=True), "jpeg"
+    # 0.5.5 planar JPEG: every plane a one-component JPEG, so alpha can be a plane of its own.
+    big_alpha = alpha(64, 48)
+    yield "jpeg_rgb_separate", [dict(samples=big, bits=8, photometric="rgb", compression="jpeg", separate=True, jpeg_quality=90, rows_per_strip=16)], {}, "jpeg-planar"
+    yield "jpeg_rgba_separate_tiles", [dict(samples=np.dstack([big, big_alpha]), bits=8, photometric="rgb", extra=[2], compression="jpeg", separate=True, tile=(32, 32))], {}, "jpeg-planar"
+    yield "jpeg_graya_separate_be", [dict(samples=np.dstack([gray_big, big_alpha]), bits=8, photometric="minisblack", extra=[2], compression="jpeg", separate=True, rows_per_strip=24)], dict(big_endian=True), "jpeg-planar"
+    yield "jpeg_cmyk_separate", [dict(samples=cmyk_big, bits=8, photometric="cmyk", compression="jpeg", separate=True, rows_per_strip=32)], {}, "jpeg-planar"
+    yield "jpeg_ycbcr11_separate", [dict(samples=big, bits=8, photometric="ycbcr", subsampling=(1, 1), compression="jpeg", separate=True, rows_per_strip=16)], {}, "jpeg-planar"
 
     # 0.4.5 WebP (libtiff tif_webp.c with the system libwebp): lossy and lossless, RGB and RGBA, strips and tiles.
     big_rgba = np.dstack([big, alpha(64, 48)])
@@ -1000,6 +1032,19 @@ def main():
         elif kind == "model":
             record(name, expected_for(name, pages), page["bits"] <= 8)
             record_pages(name, pages)
+        elif kind == "jpeg-planar":
+            # Lossy planes: the samples are libtiff's own decode of each one-component plane (libjpeg-turbo, as the
+            # core JPEG decoder), converted by the model; YCbCr through libtiff's TIFFRGBAImage, which the port follows.
+            decoded = dict(page, samples=planar_samples(page, libtiff_bytes(path)))
+            if page["photometric"] == "ycbcr":
+                record(name, libtiff_rgba(path), False, oracle="libtiff")
+            elif page["photometric"] == "cmyk":
+                record(name, cmyk_expected(decoded["samples"], 8), False)
+            else:
+                want = page_expected(decoded)
+                if not page.get("extra"):
+                    assert np.array_equal(libtiff_rgba(path), want), name
+                record(name, want, False, oracle="model" if page.get("extra") else "libtiff")
         elif kind == "depth":
             # libtiff must read back the samples as written (predictor and compression undone); pixels from the model.
             assert libtiff_bytes(path) == source_bytes(page), name

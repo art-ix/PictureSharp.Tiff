@@ -93,5 +93,42 @@ public sealed class JpegTests
         await Assert.That(error.Format).IsSameReferenceAs(ImageFormat.Jpeg);
     }
 
+    [Test]
+    public async Task PlanarPlaneWithThreeComponents_IsCorrupt()
+    {
+        byte[] data = Planar(photometric: 2, ToJpeg(color: true));
+        ImageFormatException error = Assert.ThrowsExactly<ImageFormatException>(() => TestSupport.Load(data));
+        await Assert.That(error.Message).Contains("more than one component");
+    }
+
+    [Test]
+    public async Task PlanarYCbCrWithSubsampling_IsNotSupported()
+    {
+        // Without YCbCrSubsampling the chroma planes are subsampled 2 x 2, as libtiff assumes.
+        byte[] data = Planar(photometric: 6, ToJpeg(color: false));
+        await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
+        byte[] full = TiffBuilder.GrayStrip(16, 8, 7, [.. Enumerable.Repeat(ToJpeg(color: false), 3).SelectMany(b => b)])
+            .Set(277, TiffBuilder.Short, 3).Set(262, TiffBuilder.Short, 6).Set(284, TiffBuilder.Short, 2).Set(530, TiffBuilder.Short, 1, 1)
+            .Set(273, TiffBuilder.Long, Offsets(ToJpeg(color: false).Length)).Set(279, TiffBuilder.Long, Counts(ToJpeg(color: false).Length)).Build();
+        using Image image = TestSupport.Load(full);
+        await Assert.That(image.Width).IsEqualTo(16);
+    }
+
+    /// <summary>A 16 x 8 planar file with three samples, each plane one strip holding <paramref name="plane"/>.</summary>
+    private static byte[] Planar(ushort photometric, byte[] plane) =>
+        TiffBuilder.GrayStrip(16, 8, 7, [.. Enumerable.Repeat(plane, 3).SelectMany(b => b)])
+            .Set(277, TiffBuilder.Short, 3).Set(262, TiffBuilder.Short, photometric).Set(284, TiffBuilder.Short, 2)
+            .Set(273, TiffBuilder.Long, Offsets(plane.Length)).Set(279, TiffBuilder.Long, Counts(plane.Length)).Build();
+
+    private static uint[] Offsets(int length) => [8, (uint)(8 + length), (uint)(8 + 2 * length)];
+
+    private static uint[] Counts(int length) => [(uint)length, (uint)length, (uint)length];
+
+    private static byte[] ToJpeg(bool color)
+    {
+        using var source = new Image(16, 8, color ? new Rgba32(200, 40, 90, 255) : new Rgba32(90, 90, 90, 255));
+        return source.ToJpeg(new JpegEncoderOptions { ColorMode = color ? JpegColorMode.Color : JpegColorMode.Grayscale });
+    }
+
     private sealed record JpegEntry(int Width, int Height, JsonElement[][] Chunks, string Pillow, bool Cmyk = false);
 }

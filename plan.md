@@ -27,7 +27,7 @@ CMYK JPEG (0.5.5) waits for a core request.**
 | 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Released 2026-10-21 |
 | 0.5.3 | Reading: more sample formats and bit depths | Implemented, released in 0.6.0 |
 | 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
-| 0.5.5 | Reading: JPEG variants (planar, CMYK) | Planned, released in 0.6.0 |
+| 0.5.5 | Reading: JPEG variants (planar, CMYK) | Implemented, released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Planned |
 
 0.4.1–0.4.5 are internal milestones, each with its own DoD and commit, but not published to NuGet: the encoder is
@@ -553,7 +553,16 @@ Ordered by how often the features appear in real files. Each milestone extends t
     `cref`s ambiguous (CS0419 under `TreatWarningsAsErrors`); they name the overload now. Corpus: `jpeg_cmyk_strips`
     and `jpeg_cmyk_tiles_be` (libtiff, no Adobe marker), `jpeg.json` marks them `cmyk` so `JpegTests` decodes the
     standalone strips as plain; whole images within 1 of `TIFFReadRGBAImage`. 2653 tests pass.
-  - Left in 0.5.5: planar JPEG.
+  - Planar JPEG done 2026-10-22 (uncommitted): `TiffJpeg.DecodePlane` decodes each plane of a chunk as a one-component
+    JPEG (libtiff `JPEGPreDecode` for PLANARCONFIG_SEPARATE; no Adobe marker added, the SOF must have one component)
+    into the chunk buffer, then the usual converter runs, so RGB, grey, CMYK, YCbCr 1x1 and alpha planes all work.
+    Planar YCbCr with subsampling (libtiff stores smaller chroma planes; its RGBA path rejects them) is
+    `NotSupportedException`. Corpus: `jpeg_rgb_separate`, `jpeg_rgba_separate_tiles`, `jpeg_graya_separate_be`,
+    `jpeg_cmyk_separate`, `jpeg_ycbcr11_separate` (kind "jpeg-planar": libtiff's own plane samples through the model,
+    YCbCr and RGB against `TIFFReadRGBAImage` exactly); every file decodes bit-exactly, as the core decoder matches
+    libjpeg-turbo. Tests: a three-component plane, subsampled planar YCbCr. 2720 tests pass; re-encoded corpus
+    917/917, edited 131/131.
+  - 0.5.5 is complete; it ships in 0.6.0 with 0.5.4 (CIELab), after core 0.7.10 is on NuGet.
 - **Not planned:** LogLuv, PixarLog (HDR; no 8-bit-only use), transparency masks (photometric 4) as the main page,
   different `BitsPerSample` per sample, CMYK with other ink sets or premultiplied alpha, YCbCr deeper than 8 bits.
   They keep throwing `NotSupportedException`.

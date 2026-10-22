@@ -457,6 +457,36 @@
   "oracle": "model",
   "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
  },
+ "jpeg_cmyk_separate.tif": {
+  "width": 64,
+  "height": 48,
+  "oracle": "model",
+  "sha256": "183bfd6ca7bec4988eb137af0595283e34e996180f9fff89eaf27432ee1e1476"
+ },
+ "jpeg_graya_separate_be.tif": {
+  "width": 64,
+  "height": 48,
+  "oracle": "model",
+  "sha256": "c0d59168f244a5c5b4c32c1a4651991fecd15a7c5b9a981d7dbfaf1630fa553e"
+ },
+ "jpeg_rgb_separate.tif": {
+  "width": 64,
+  "height": 48,
+  "oracle": "libtiff",
+  "sha256": "1d46d8bc08286d5f3616ec7f01b6b5ef15656d4714ea12a0a2772ab25289ecd6"
+ },
+ "jpeg_rgba_separate_tiles.tif": {
+  "width": 64,
+  "height": 48,
+  "oracle": "model",
+  "sha256": "544c32b7c9b883eb85b52327ac259f8267b1598fb6125e461c54dff85e899e32"
+ },
+ "jpeg_ycbcr11_separate.tif": {
+  "width": 64,
+  "height": 48,
+  "oracle": "libtiff",
+  "sha256": "652bf8ec463f5f87ce286db62149d923c46604501d19394168c635b1e24d862f"
+ },
  "metadata.tif": {
   "width": 37,
   "height": 23,

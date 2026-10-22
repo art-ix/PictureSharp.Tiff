@@ -8,7 +8,8 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// <summary>
 /// Decodes strips or tiles one chunk index at a time: every plane of a chunk is decompressed and un-predicted into a
 /// pooled buffer, then a <see cref="TiffChunkConverter"/> writes its visible pixels, so planar images need no full copy.
-/// JPEG chunks are decoded by the configuration's JPEG codec instead (<see cref="TiffJpeg"/>), and WebP chunks by its WebP
+/// Contiguous JPEG chunks are decoded by the configuration's JPEG codec instead (<see cref="TiffJpeg"/>), the planes of
+/// planar JPEG chunks by it into the buffer as one-component images, and WebP chunks by its WebP
 /// codec into the same buffer (<see cref="TiffWebP"/>). Uncompressed contiguous chunks convert straight from the file.
 /// Chunks write disjoint rectangles of the image, so contiguous ranges of them decode in parallel, each thread with its
 /// own <see cref="ChunkDecoder"/>; an image in one strip or tile is un-predicted and converted in parallel row bands
@@ -42,7 +43,7 @@ internal static class TiffPixelDecoder
         }
 
         var job = new Job(data, ifd, layout, offsets, hasCounts ? counts : null, pixels, context,
-            layout.IsJpeg ? null : TiffChunkConverter.Create(bytes, ifd, layout),
+            layout.IsJpeg && !layout.Separate ? null : TiffChunkConverter.Create(bytes, ifd, layout),
             layout.IsJpeg ? new TiffJpeg(bytes, ifd, layout) : null);
         if (layout.Compression == TiffLayout.CompressionLzw)
         {
@@ -83,7 +84,7 @@ internal static class TiffPixelDecoder
     /// </summary>
     private static int Degree(TiffLayout layout, int threads)
     {
-        long perThread = (layout.IsJpeg || InPlace(layout) ? 0 : layout.ChunkBytes(layout.ChunkHeight) * layout.Planes)
+        long perThread = ((layout.IsJpeg && !layout.Separate) || InPlace(layout) ? 0 : layout.ChunkBytes(layout.ChunkHeight) * layout.Planes)
             + (layout.IsJpeg || layout.Compression == TiffLayout.CompressionWebP ? (long)layout.ChunkWidth * layout.ChunkHeight * 4 : 0);
         long degree = Math.Min(threads, layout.ChunksPerPlane);
         return (int)Math.Clamp(Math.Min(degree, (long)layout.Width * layout.Height * 4 / Math.Max(1, perThread)), 1, int.MaxValue);
@@ -301,7 +302,7 @@ internal static class TiffPixelDecoder
             this.job = job;
             TiffLayout layout = job.Layout;
             planeBytes = (int)layout.ChunkBytes(layout.ChunkHeight);
-            buffer = layout.IsJpeg || InPlace(layout) ? [] : ArrayPool<byte>.Shared.Rent(planeBytes * layout.Planes);
+            buffer = (layout.IsJpeg && !layout.Separate) || InPlace(layout) ? [] : ArrayPool<byte>.Shared.Rent(planeBytes * layout.Planes);
             lzw = layout.Compression == TiffLayout.CompressionLzw ? new LzwDecoder(job.LzwCompat) : null;
             fax = layout.IsCcitt ? new FaxDecoder(job.Data.Span, job.Ifd, layout) : null;
         }
@@ -314,7 +315,7 @@ internal static class TiffPixelDecoder
             int width = layout.Width;
             (int cx, int cy, int visibleWidth, int visibleRows) = Region(layout, c);
             Span<Rgba32> pixels = job.Pixels.Span[(cy * width + cx)..];
-            if (job.Jpeg is not null)
+            if (job.Jpeg is not null && !layout.Separate)
             {
                 ReadOnlyMemory<byte> raw = Raw(data, ifd.GetULong(bytes, job.Offsets, (int)c), ifd.GetULong(bytes, job.Counts!.Value, (int)c));
                 job.Jpeg.Decode(raw, job.Context, visibleWidth, visibleRows, pixels, width);
@@ -339,7 +340,14 @@ internal static class TiffPixelDecoder
                     Span<byte> output = buffer.AsSpan(p * planeBytes, length);
                     ulong offset = ifd.GetULong(bytes, job.Offsets, index);
                     ulong count = job.Counts is { } counts ? ifd.GetULong(bytes, counts, index) : (ulong)output.Length;
-                    Decompress(Raw(data, offset, count), layout, lzw, fax, job.Context, rows, output);
+                    if (job.Jpeg is not null)
+                    {
+                        job.Jpeg.DecodePlane(Raw(data, offset, count), job.Context, visibleWidth, visibleRows, output);
+                    }
+                    else
+                    {
+                        Decompress(Raw(data, offset, count), layout, lzw, fax, job.Context, rows, output);
+                    }
                 }
             }
 

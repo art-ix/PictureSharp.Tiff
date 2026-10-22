@@ -266,10 +266,18 @@ internal sealed class TiffLayout
             throw new NotSupportedException("CCITT compression is only supported for 1-bit bilevel TIFF images.");
         }
 
-        if (IsJpeg && (BitsPerSample != 8 || SampleFormat != FormatUnsigned || Separate || SamplesPerPixel != ColorSamples
+        // Planar JPEG holds one-component planes, so extra samples (alpha) are possible there, as in libtiff.
+        if (IsJpeg && (BitsPerSample != 8 || SampleFormat != FormatUnsigned || (!Separate && SamplesPerPixel != ColorSamples)
             || Photometric is not (BlackIsZero or Rgb or YCbCr or Separated)))
         {
-            throw new NotSupportedException($"JPEG-compressed TIFF images are only supported as contiguous 8-bit greyscale, RGB, YCbCr or CMYK, not photometric {Photometric} with {SamplesPerPixel} samples.");
+            throw new NotSupportedException($"JPEG-compressed TIFF images are only supported as 8-bit greyscale, RGB, YCbCr or CMYK (alpha only in separate planes), not photometric {Photometric} with {SamplesPerPixel} samples.");
+        }
+
+        // port: libtiff/tif_getimage.c PickSeparateCase converts planar YCbCr only without subsampling; libtiff stores
+        // subsampled chroma planes smaller (JPEGPreDecode), which this decoder does not read.
+        if (IsJpeg && Separate && Photometric == YCbCr && Subsampling != (1, 1))
+        {
+            throw new NotSupportedException($"Planar JPEG-compressed TIFF YCbCr with subsampling {Subsampling.Horizontal}x{Subsampling.Vertical} is not supported.");
         }
 
         // port: libtiff/tif_webp.c TWebPSetupDecode, TWebPFixupTags and TWebPPreDecode reject these as errors.
