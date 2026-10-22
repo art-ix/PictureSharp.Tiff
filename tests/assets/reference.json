@@ -311,6 +311,18 @@
   "oracle": "pillow",
   "sha256": "2f376bc370c521ae9b0908cd3c7440fe0adcdfeba3f1ec13d4e9ea28b8d54b0d"
  },
+ "gray2_next.tif": {
+  "width": 37,
+  "height": 14,
+  "oracle": "libtiff",
+  "sha256": "c794ea47eeb56aa786281639932570abdf725126214c55a07f3967f3f454bdae"
+ },
+ "gray2_next_short.tif": {
+  "width": 37,
+  "height": 14,
+  "oracle": "libtiff",
+  "sha256": "5ec5f3af9bae1de7b4666a1aa86405182f4f558e6d077e565bedc68cffa9f49d"
+ },
  "gray2_none.tif": {
   "width": 37,
   "height": 23,
@@ -352,6 +364,12 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "2f952aab39ec61995bd7bf33bbed79093449962db682cdcc7ed8edc5f6a0f18d"
+ },
+ "gray4_thunderscan.tif": {
+  "width": 41,
+  "height": 12,
+  "oracle": "libtiff",
+  "sha256": "232ab8685b1bc9d139b147a19a44c328acac48b50dfc990c1f15826256608b6f"
  },
  "gray5_none.tif": {
   "width": 37,

@@ -404,6 +404,80 @@ def write_classic(path, w, h, bits, spp, photometric, compression, strips, byte_
         f.write(magic + struct.pack(order + "I", ifd_offset) + blob + ifd + extra)
 
 
+def next_encode(rows, rng):
+    """NeXT 2-bit greyscale (tif_next.c), one code per row: literal rows, literal spans on white, runs."""
+    out = bytearray()
+    for r in range(rows.shape[0]):
+        row = rows[r:r + 1]
+        packed = pack_rows(row, 2)
+        mode = r % 3 if r < 3 else int(rng.integers(0, 3))
+        white = np.where(row[0, :, 0] != 3)[0]
+        if mode == 1 and len(white):
+            # A literal span: the bytes from the first to the last non-white pixel, white around them.
+            first, last = white[0] // 4, white[-1] // 4 + 1
+            out += bytes([0x40]) + struct.pack(">HH", first, last - first) + packed[first:last]
+        elif mode == 2:
+            # Runs of <grey:2><count:6>, never the codes 0x00 and 0x40 that start the other modes.
+            v = row[0, :, 0]
+            i = 0
+            while i < len(v):
+                n = 1
+                while i + n < len(v) and v[i + n] == v[i] and n < 63:
+                    n += 1
+                out.append((int(v[i]) << 6) | n)
+                i += n
+        else:
+            out += bytes([0x00]) + packed
+    return bytes(out)
+
+
+def thunder_encode(rows, rng):
+    """ThunderScan 4-bit greyscale (tif_thunder.c): each row from a last pixel of 0, with runs, 2-bit and 3-bit
+    deltas and raw values chosen at random where they fit; no run reaches the end of a row."""
+    two = {0: 0, 1: 1, -1: 3}
+    three = {0: 0, 1: 1, 2: 2, 3: 3, -3: 5, -2: 6, -1: 7}
+    out = bytearray()
+    for v in rows[..., 0]:
+        v = [int(x) for x in v]
+        last, i = 0, 0
+        while i < len(v):
+            choices = ["raw"]
+            run = 0
+            # libtiff stores no pixel of a run that ends exactly at the end of the row (npixels < maxpixels).
+            while i + run < len(v) - 1 and v[i + run] == last and run < 63:
+                run += 1
+            if run:
+                choices.append("run")
+            if ((v[i] - last + 8) % 16) - 8 in three:
+                choices.append("three")
+            if ((v[i] - last + 8) % 16) - 8 in two:
+                choices.append("two")
+            kind = choices[int(rng.integers(0, len(choices)))]
+            if kind == "run":
+                out.append(run)
+                i += run
+            elif kind == "raw":
+                out.append(0xC0 | v[i])
+                last = v[i]
+                i += 1
+            else:
+                table, width, skip, count = (three, 3, 4, 2) if kind == "three" else (two, 2, 2, 3)
+                codes = []
+                while len(codes) < count:
+                    d = ((v[i] - last + 8) % 16) - 8 if i < len(v) else None
+                    if d is None or d not in table:
+                        codes.append(skip)
+                    else:
+                        codes.append(table[d])
+                        last = v[i]
+                        i += 1
+                byte = 0x80 if kind == "three" else 0x40
+                for c in codes:
+                    byte = (byte << width) | c
+                out.append((0x80 if kind == "three" else 0x40) | (byte & ((1 << (width * count)) - 1)))
+    return bytes(out)
+
+
 def fp_diff_rows(samples, order):
     """Predictor 3 as the TIFF technical note specifies it: per row, the sample bytes in byte order `order` split
     into planes most significant first, then differenced byte by byte with a stride of the samples per pixel."""
@@ -1095,6 +1169,30 @@ def main():
     # Pillow's tiff_wrong_bits_per_sample_2: four BitsPerSample values for three samples; libtiff checks the first three.
     chunk_case("rgb8_extra_bitspersample", rgb4, 1, [rgb4.tobytes()], bits_values=[8, 8, 8, 1])
     chunk_case("rgb8_signed_offsets", rgb4, 1, [rgb4[y:y + 4].tobytes() for y in (0, 4)], types={273: 9, 279: 8})
+
+    # 0.8.0: NeXT (2 bits) and ThunderScan (4 bits), which libtiff only decodes; encoders above, libtiff's
+    # TIFFReadRGBAImage must give the model.
+    def coded_case(name, samples, bits, compression, strips, want=None):
+        h, w, _ = samples.shape
+        write_classic(os.path.join(CORPUS, name + ".tif"), w, h, bits, 1, 1, compression, strips)
+        want = expected(samples, bits, "minisblack") if want is None else want
+        if not np.array_equal(libtiff_rgba(os.path.join(CORPUS, name + ".tif")), want):
+            raise SystemExit(f"{name}: libtiff differs from the model")
+        record(name, want, False, oracle="libtiff")
+
+    rng080 = np.random.default_rng(80)
+    shade = (np.add.outer(np.arange(14), np.arange(37)) // 5 % 4).astype(np.uint8)[..., None]
+    shade[3:6, 10:30] = 3
+    shade[7, :] = 3
+    shade[7, 13:19] = rng080.integers(0, 3, (6, 1))
+    coded_case("gray2_next", shade, 2, 32766, [next_encode(shade[y:y + 5], rng080) for y in range(0, 14, 5)])
+    # Data that ends early leaves the remaining rows white, without an error (libtiff).
+    cut = shade.copy()
+    cut[9:] = 3
+    coded_case("gray2_next_short", shade, 2, 32766, [next_encode(shade[:9], rng080)], want=expected(cut, 2, "minisblack"))
+    ramp = ((np.add.outer(np.arange(12), np.arange(41)) // 3 + rng080.integers(0, 2, (12, 41))) % 16).astype(np.uint8)[..., None]
+    ramp[4, 5:30] = ramp[4, 5]
+    coded_case("gray4_thunderscan", ramp, 4, 32809, [thunder_encode(ramp[y:y + 4], rng080) for y in range(0, 12, 4)])
 
     rgb = photo(19, 11, 4)
     write_classic(os.path.join(CORPUS, "rgb8_no_bytecounts.tif"), 19, 11, 8, 3, 2, 1,

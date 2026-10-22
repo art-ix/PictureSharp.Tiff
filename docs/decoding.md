@@ -37,7 +37,7 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | | Supported |
 | --- | --- |
 | Container | classic TIFF and BigTIFF, little- and big-endian; strips or tiles; contiguous or planar samples |
-| Compression | none, PackBits, LZW (also the old LSB-first variant), Deflate (8 and 32946), JPEG (7), WebP (50001), CCITT RLE, RLEW, Group 3 (1D and 2D) and Group 4 (bilevel or 1-bit palette); `FillOrder` 2 |
+| Compression | none, PackBits, LZW (also the old LSB-first variant), Deflate (8 and 32946), JPEG (7), WebP (50001), CCITT RLE, RLEW, Group 3 (1D and 2D) and Group 4 (bilevel or 1-bit palette), NeXT (2 bits), ThunderScan (4 bits, strips); `FillOrder` 2 |
 | Predictor | horizontal (2) for 8-, 16-, 32- and 64-bit samples (floating point too, differenced as integers, as libtiff does) and floating point (3), with LZW and Deflate |
 | Greyscale, RGB | unsigned 1 to 16 and 32 bits; signed 8, 16 and 32 bits; black or white is zero for greyscale |
 | Palette | 1, 2, 4 and 8 bits; 8 bits with straight alpha (`ExtraSamples` 2, Pillow's "PA") |
@@ -48,11 +48,11 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | Alpha | `ExtraSamples` associated (unpremultiplied) or unassociated, following Pillow's rules |
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
-NeXT, ThunderScan, LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes,
-transparency masks, palettes with alpha other than 8-bit straight, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than 8-bit greyscale, RGB, YCbCr or CMYK (alpha only with
-separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As
-in libtiff, WebP other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG,
-Zstandard and JBIG are discussed under Deferred in the
+LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes, transparency masks, palettes
+with alpha other than 8-bit straight, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than 8-bit
+greyscale, RGB, YCbCr or CMYK (alpha only with separate planes; planar YCbCr only without subsampling), and WebP with
+a photometric interpretation other than RGB. As in libtiff, WebP other than 3 or 4 contiguous 8-bit samples is an
+error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
 
 ### Conversion to 8 bits
@@ -150,9 +150,9 @@ every page of the multi-page files is checked. The corpus is regenerated with `t
 
 Real-world files (0.7.0, not committed): 420 files from libtiff's test images and `pics-3.8.0`, GDAL 3.9.0's
 autotest data, Pillow 10.2.0's test images and ExifTool 12.76 (466 IFDs). Every page libtiff converts cleanly
-decodes to its `TIFFReadRGBAImage` raster, exactly or within the rounding differences above (325 exact, 35 within
-1); 56 pages libtiff does not convert (other depths, floating point, 16-bit CMYK) match the rules above applied to
+decodes to its `TIFFReadRGBAImage` raster, exactly or within the rounding differences above (329 exact with NeXT
+and ThunderScan, 35 within 1); 56 pages libtiff does not convert (other depths, floating point, 16-bit CMYK) match the rules above applied to
 the samples libtiff decodes. Files libtiff rejects or decodes only with errors throw `ImageFormatException` or
-`NotSupportedException` here; 21 pages that libtiff converts use a feature listed as not supported (old-style JPEG,
-LogLuv, Zstandard, LZMA, LERC, NeXT, ThunderScan, JPEG with contiguous alpha). `Image.EditMetadata` leaves every
+`NotSupportedException` here; 16 pages that libtiff converts use a feature listed as not supported (old-style JPEG,
+LogLuv, Zstandard, LZMA, LERC, JPEG with contiguous alpha). `Image.EditMetadata` leaves every
 page of the 396 editable files decoding as before, in this decoder and in libtiff.

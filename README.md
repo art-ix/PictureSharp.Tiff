@@ -27,11 +27,11 @@ Other pages, JPEG compression and tiles are covered in the guides below.
 
 ## Support
 
-- **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP and CCITT fax; grey, palette, RGB, CMYK,
-  YCbCr and CIE L*a*b*, with or without alpha; integer samples of 1 to 16 and 32 bits (also signed), float of 16, 32
-  and 64 bits.
-- **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha; the same compressions (CCITT
-  Group 4 only).
+- **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP, CCITT fax, NeXT and ThunderScan; grey,
+  palette, RGB, CMYK, YCbCr and CIE L*a*b*, with or without alpha; integer samples of 1 to 16 and 32 bits (also
+  signed), float of 16, 32 and 64 bits.
+- **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha; the same compressions except
+  NeXT and ThunderScan (CCITT Group 4 only).
 - **Metadata:** ICC, XMP, EXIF/GPS, orientation and resolution, also edited in place.
 - **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, ICC and ITU L*a*b*; writing 16-bit, CMYK or planar data.
 

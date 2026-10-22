@@ -781,6 +781,16 @@ Decisions for the user before 1.0, each with its cost estimated here first:
   throughput on many files.
 - DoD: decisions recorded; the chosen features implemented and released as 0.8.x milestones.
 
+Done ahead of the decisions (user request, 2026-10-22, not released):
+- **NeXT (32766) and ThunderScan (32809):** ports of `tif_next.c` and `tif_thunder.c` (`NeXTDecoder`,
+  `ThunderScanDecoder`), 2-bit and 4-bit with one sample per pixel, ThunderScan in strips only (libtiff counts the
+  image width). libtiff has no encoders, so the generator has its own (`next_encode`, `thunder_encode`, every code
+  and row mode); `gray2_next`, `gray2_next_short` (data that ends early leaves white rows, as in libtiff) and
+  `gray4_thunderscan` match `TIFFReadRGBAImage`. Quirk kept: a ThunderScan run ending exactly at the end of a row
+  stores no pixel (libtiff leaves its buffer there, the plugin zeros; the generator's encoder avoids such runs).
+  External files: GDAL's three NeXT files and `thunder.tif` exact; `pics-3.8.0` `text.tif` is short at row 320,
+  which libtiff reports too.
+
 ### 0.9.0 — release candidate
 
 - API frozen: `PublicApi.approved.txt` reviewed line by line; anything not meant to be permanent removed or made

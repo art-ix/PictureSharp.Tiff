@@ -228,6 +228,12 @@ internal static class TiffPixelDecoder
                 case TiffLayout.CompressionDeflate or TiffLayout.CompressionDeflateOld:
                     DeflateDecoder.Decode(raw, output);
                     break;
+                case TiffLayout.CompressionNeXT:
+                    NeXTDecoder.Decode(raw.Span, output, (int)layout.RowBytes, layout.ChunkWidth);
+                    break;
+                case TiffLayout.CompressionThunderScan:
+                    ThunderScanDecoder.Decode(raw.Span, output, (int)layout.RowBytes, layout.ChunkWidth);
+                    break;
                 case TiffLayout.CompressionWebP:
                     TiffWebP.Decode(raw, context, layout, rows, output);
                     break;

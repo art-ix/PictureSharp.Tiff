@@ -21,8 +21,10 @@ internal sealed class TiffLayout
     public const int CompressionLzw = 5;
     public const int CompressionJpeg = 7;
     public const int CompressionDeflate = 8;
+    public const int CompressionNeXT = 32766;
     public const int CompressionCcittRlew = 32771;
     public const int CompressionPackBits = 32773;
+    public const int CompressionThunderScan = 32809;
     public const int CompressionDeflateOld = 32946;
     public const int CompressionWebP = 50001;
 
@@ -248,10 +250,10 @@ internal sealed class TiffLayout
         string? name = Compression switch
         {
             CompressionNone or CompressionCcittRle or CompressionCcittFax3 or CompressionCcittFax4 or CompressionLzw or CompressionJpeg
-                or CompressionDeflate or CompressionCcittRlew or CompressionPackBits or CompressionDeflateOld or CompressionWebP => null,
+                or CompressionDeflate or CompressionCcittRlew or CompressionPackBits or CompressionDeflateOld or CompressionWebP
+                or CompressionNeXT or CompressionThunderScan => null,
             6 => "old-style JPEG (6)",
             9 or 10 or 34661 => "JBIG",
-            32809 => "ThunderScan",
             32908 or 32909 => "PixarLog",
             34676 or 34677 => "SGILog (LogLuv)",
             34712 => "JPEG 2000",
@@ -269,6 +271,18 @@ internal sealed class TiffLayout
         if (IsCcitt && (BitsPerSample != 1 || SamplesPerPixel != 1 || Photometric is not (WhiteIsZero or BlackIsZero or Palette)))
         {
             throw new NotSupportedException("CCITT compression is only supported for 1-bit bilevel or palette TIFF images.");
+        }
+
+        // port: libtiff/tif_next.c NeXTPreDecode and tif_thunder.c ThunderSetupDecode: 2 and 4 bits only. Both count
+        // pixels per row, so one sample per pixel; ThunderScan counts the image width, so strips only.
+        if (Compression == CompressionNeXT && (BitsPerSample != 2 || SamplesPerPixel != 1))
+        {
+            throw new NotSupportedException("NeXT compression is only supported for 2-bit images with one sample per pixel.");
+        }
+
+        if (Compression == CompressionThunderScan && (BitsPerSample != 4 || SamplesPerPixel != 1 || Tiled))
+        {
+            throw new NotSupportedException("ThunderScan compression is only supported for 4-bit strips with one sample per pixel.");
         }
 
         // Planar JPEG holds one-component planes, so extra samples (alpha) are possible there, as in libtiff.
