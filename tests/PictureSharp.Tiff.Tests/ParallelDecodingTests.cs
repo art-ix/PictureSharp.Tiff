@@ -140,16 +140,28 @@ public sealed class ParallelDecodingTests
         TimeSpan canceledAt = TimeSpan.Zero;
         using var cancel = new CancellationTokenSource();
         cancel.Token.Register(() => canceledAt = watch.Elapsed);
-        // A dedicated thread, not CancelAfter: its timer callback runs on the thread pool, which the parallel decode
-        // keeps busy, so on a small machine (3 cores on macOS runners) it could fire only after the decode finished.
+        // A dedicated thread that spins on the clock, not CancelAfter or a sleep: the timer callback runs on the thread
+        // pool, which the parallel decode keeps busy, and waking a sleeping thread while every core decodes can take
+        // longer than the decode on a small CI runner. A running thread gets its time slices without that delay.
         var canceler = new Thread(() =>
         {
-            Thread.Sleep(full / 3);
+            while (watch.Elapsed < full / 3)
+            {
+                Thread.SpinWait(100);
+            }
+
             cancel.Cancel();
-        }) { IsBackground = true, Priority = ThreadPriority.Highest };
+        }) { IsBackground = true };
         canceler.Start();
-        await Assert.That(() => Image.Load(data, options, cancel.Token)).Throws<OperationCanceledException>();
-        canceler.Join();
+        try
+        {
+            await Assert.That(() => Image.Load(data, options, cancel.Token)).Throws<OperationCanceledException>();
+        }
+        finally
+        {
+            // Before the source is disposed, also when the assertion fails (Retry runs the test again).
+            canceler.Join();
+        }
 
         // 1536 strips: stopping after the strip each thread is on takes a small part of the whole decode.
         await Assert.That(watch.Elapsed - canceledAt).IsLessThan(full / 4);
