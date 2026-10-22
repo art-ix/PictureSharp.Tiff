@@ -8,7 +8,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
 (see "Next: 0.6.1–1.0.0"): 0.7.0 released 2026-10-22 (real-world files, with the 0.6.1 housekeeping); 0.7.1
-(platforms) done, not released; 0.7.2 (fuzzing) next.**
+(platforms, NeXT and ThunderScan) done, not released; 0.7.2 (fuzzing) next.**
 
 ## Versions
 
@@ -32,7 +32,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Released in 0.7.0 |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Released 2026-10-22 |
-| 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Done, not released |
+| 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Done, not released |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
@@ -741,8 +741,8 @@ Progress 2026-10-22:
     conversion gives the same (Pillow assumes MinIsWhite). A lone extra sample without `ExtraSamples` is straight
     alpha (Pillow); libtiff takes a fourth RGB sample as associated.
   - Candidates for 0.8.0 (libtiff converts, the plugin reports `NotSupportedException`): old-style JPEG (9 pages),
-    LogLuv (5), Zstandard (3), NeXT 2-bit (3), ThunderScan (2), LZMA (1), LERC (1), JPEG RGB with contiguous
-    alpha (1). Not copied: libtiff decodes partial images of corrupt files (stop-on-error off) where the plugin
+    LogLuv (5), Zstandard (3), NeXT 2-bit (3, done in 0.7.1), ThunderScan (2, done in 0.7.1), LZMA (1), LERC (1),
+    JPEG RGB with contiguous alpha (1). Not copied: libtiff decodes partial images of corrupt files (stop-on-error off) where the plugin
     throws; libtiff's guess that a colour map below 256 is 8-bit.
 
 ### 0.7.1 — platforms
@@ -771,6 +771,14 @@ Done 2026-10-22, not released. Decisions and deviations:
   external ones (libtiff rasters made on x64), and 3824/3824 again with `DOTNET_EnableHWIntrinsic=0` (scalar
   fallback of `TiffPixelScan` and the core's vector code); a linux-arm64 Native AOT consumer decodes 27 files
   identically to x64 JIT. No platform differences.
+- **NeXT (32766) and ThunderScan (32809)**, moved here from the 0.8.0 candidates (user decision, 2026-10-22): ports of `tif_next.c` and `tif_thunder.c` (`NeXTDecoder`,
+  `ThunderScanDecoder`), 2-bit and 4-bit with one sample per pixel, ThunderScan in strips only (libtiff counts the
+  image width). libtiff has no encoders, so the generator has its own (`next_encode`, `thunder_encode`, every code
+  and row mode); `gray2_next`, `gray2_next_short` (data that ends early leaves white rows, as in libtiff) and
+  `gray4_thunderscan` match `TIFFReadRGBAImage`. Quirk kept: a ThunderScan run ending exactly at the end of a row
+  stores no pixel (libtiff leaves its buffer there, the plugin zeros; the generator's encoder avoids such runs).
+  External files: GDAL's three NeXT files and `thunder.tif` exact; `pics-3.8.0` `text.tif` is short at row 320,
+  which libtiff reports too.
 
 ### 0.7.2 — fuzzing
 
@@ -795,16 +803,6 @@ Decisions for the user before 1.0, each with its cost estimated here first:
 - **Performance:** a faster single-thread LZW decoder (363 against 268 ms for libtiff on 24 MP), which matters for
   throughput on many files.
 - DoD: decisions recorded; the chosen features implemented and released as 0.8.x milestones.
-
-Done ahead of the decisions (user request, 2026-10-22, not released):
-- **NeXT (32766) and ThunderScan (32809):** ports of `tif_next.c` and `tif_thunder.c` (`NeXTDecoder`,
-  `ThunderScanDecoder`), 2-bit and 4-bit with one sample per pixel, ThunderScan in strips only (libtiff counts the
-  image width). libtiff has no encoders, so the generator has its own (`next_encode`, `thunder_encode`, every code
-  and row mode); `gray2_next`, `gray2_next_short` (data that ends early leaves white rows, as in libtiff) and
-  `gray4_thunderscan` match `TIFFReadRGBAImage`. Quirk kept: a ThunderScan run ending exactly at the end of a row
-  stores no pixel (libtiff leaves its buffer there, the plugin zeros; the generator's encoder avoids such runs).
-  External files: GDAL's three NeXT files and `thunder.tif` exact; `pics-3.8.0` `text.tif` is short at row 320,
-  which libtiff reports too.
 
 ### 0.9.0 — release candidate
 
