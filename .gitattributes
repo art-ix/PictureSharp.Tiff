@@ -1,0 +1,7 @@
+# TIFF corpus, snapshots and packages are binary; never convert line endings in them.
+*.tif binary
+*.tiff binary
+*.jpg binary
+*.webp binary
+*.jpeg binary
+*.png binary

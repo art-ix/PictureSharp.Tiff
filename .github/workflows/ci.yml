@@ -20,3 +20,19 @@ jobs:
         with:
           name: packages
           path: artifacts/*.nupkg
+
+  platforms:
+    # Build and tests on Windows and macOS. The oracles (libtiff, Pillow) are Python scripts run by hand on Linux; the
+    # tests themselves compare against committed references and need nothing installed.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build -c Release
+      - run: dotnet test -c Release
