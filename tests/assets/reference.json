@@ -487,6 +487,36 @@
   "oracle": "libtiff",
   "sha256": "652bf8ec463f5f87ce286db62149d923c46604501d19394168c635b1e24d862f"
  },
+ "lab16_deflate_predictor_whitepoint.tif": {
+  "width": 61,
+  "height": 29,
+  "oracle": "libtiff",
+  "sha256": "079301516d44ccb6fbfea9b8172362bb21ff572732c1525e9e1aea008034e0ad"
+ },
+ "lab16_none_be.tif": {
+  "width": 61,
+  "height": 29,
+  "oracle": "libtiff",
+  "sha256": "5d67d13e7f416fb8a9a36cd15b8916580bb5237a43471e7fcda24375f7c3d62d"
+ },
+ "lab8_lzw_predictor_tiles.tif": {
+  "width": 61,
+  "height": 29,
+  "oracle": "libtiff",
+  "sha256": "f0829d827c2d8f2b8a54aa92f7bfba06b5d14476ac94cc04422d62e5ee9bea00"
+ },
+ "lab8_none.tif": {
+  "width": 61,
+  "height": 29,
+  "oracle": "libtiff",
+  "sha256": "f0829d827c2d8f2b8a54aa92f7bfba06b5d14476ac94cc04422d62e5ee9bea00"
+ },
+ "lab8_whitepoint_d65_packbits.tif": {
+  "width": 61,
+  "height": 29,
+  "oracle": "libtiff",
+  "sha256": "475f1da00c0a27e0597c546f9aa55effc33ed921d05ce40efbd7aa4f4ce1f5b9"
+ },
  "metadata.tif": {
   "width": 37,
   "height": 23,

@@ -53,9 +53,10 @@ COLORMAP, TILEWIDTH, TILELENGTH, EXTRASAMPLES, XMLPACKET, ICCPROFILE = 320, 322,
 GROUP3OPTIONS, GROUP4OPTIONS, INKSET, SAMPLEFORMAT = 292, 293, 332, 339
 YCBCRSUBSAMPLING, REFERENCEBLACKWHITE, JPEGQUALITY, JPEGCOLORMODE = 530, 532, 65537, 65538
 WEBP_LEVEL, WEBP_LOSSLESS = 65568, 65569
+WHITEPOINT = 318
 COMPRESSIONS = dict(none=1, lzw=5, deflate=8, packbits=32773, adobe=32946, jpeg=7, rle=2, g3=3, g4=4, rlew=32771,
                     webp=50001)
-PHOTOMETRICS = dict(miniswhite=0, minisblack=1, rgb=2, palette=3, cmyk=5, ycbcr=6)
+PHOTOMETRICS = dict(miniswhite=0, minisblack=1, rgb=2, palette=3, cmyk=5, ycbcr=6, cielab=8)
 
 
 # --------------------------------------------------------------------------- sources
@@ -161,7 +162,7 @@ def write_directory(tif, samples, bits, photometric, compression="none", predict
                     tile=None, separate=False, extra=None, colormap=None, fill_order=1, subfile=0,
                     orientation=None, resolution=None, icc=None, xmp=None, sample_format=1, t4=None, t6=None,
                     jpeg_quality=None, jpeg_rgb=False, subsampling=None, ref_black_white=None,
-                    webp_level=None, webp_lossless=False):
+                    webp_level=None, webp_lossless=False, white_point=None):
     h, w, spp = samples.shape
     keep = []
     set_field(tif, IMAGEWIDTH, ctypes.c_uint32(w))
@@ -193,6 +194,10 @@ def write_directory(tif, samples, bits, photometric, compression="none", predict
         arr = (ctypes.c_float * 6)(*ref_black_white)
         keep.append(arr)
         set_field(tif, REFERENCEBLACKWHITE, arr)
+    if white_point:
+        arr = (ctypes.c_float * 2)(*white_point)
+        keep.append(arr)
+        set_field(tif, WHITEPOINT, arr)
     if fill_order != 1:
         set_field(tif, FILLORDER, ctypes.c_int(fill_order))
     if predictor != 1:
@@ -864,6 +869,27 @@ def cases_030():
     ], dict(big_tiff=True, big_endian=True), "model"
 
     yield from cases_053(w, h, rgb, gray, s)
+    yield from cases_054()
+
+
+def cases_054():
+    """0.5.4 CIE L*a*b* (photometric 8), 8 and 16 bits, with the default D50 and other white points."""
+    w, h = 61, 29
+    yy, xx = np.mgrid[0:h, 0:w]
+    # L* across the rows, a* and b* across the full signed range, so that every clipping branch is reached.
+    lab = np.dstack([yy * 255 // (h - 1), (xx * 255 // (w - 1)) - 128, ((xx * 7 + yy * 13) % 256) - 128])
+    lab8 = (lab & 0xFF).astype(np.uint8)
+    lab16 = np.dstack([lab[..., 0] * 257 + (xx % 3) * 50, lab[..., 1] * 256 + xx * 3, lab[..., 2] * 256 - yy * 5])
+    lab16[..., 0] = np.clip(lab16[..., 0], 0, 65535)
+    lab16[..., 1:] = np.clip(lab16[..., 1:], -32768, 32767)
+    lab16 = (lab16 & 0xFFFF).astype(np.uint16)
+    d65 = (0.3127, 0.3290)
+    yield "lab8_none", [dict(samples=lab8, bits=8, photometric="cielab")], {}, "libtiff"
+    yield "lab8_lzw_predictor_tiles", [dict(samples=lab8, bits=8, photometric="cielab", compression="lzw", predictor=2, tile=(16, 16))], {}, "libtiff"
+    yield "lab8_whitepoint_d65_packbits", [dict(samples=lab8, bits=8, photometric="cielab", compression="packbits", white_point=d65, rows_per_strip=7)], {}, "libtiff"
+    yield "lab16_none_be", [dict(samples=lab16, bits=16, photometric="cielab")], dict(big_endian=True), "libtiff"
+    yield "lab16_deflate_predictor_whitepoint", [dict(samples=lab16, bits=16, photometric="cielab", compression="deflate", predictor=2,
+                                                      white_point=(0.34567, 0.35850), rows_per_strip=10)], {}, "libtiff"
 
 
 def cases_053(w, h, rgb, gray, s):

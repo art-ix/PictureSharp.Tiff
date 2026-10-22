@@ -7,6 +7,7 @@ internal sealed class TiffBuilder
 {
     public const ushort Short = 3;
     public const ushort Long = 4;
+    public const ushort Rational = 5;
 
     private readonly SortedDictionary<ushort, (ushort Type, uint[] Values)> entries = [];
     private readonly byte[] pixels;
@@ -61,10 +62,11 @@ internal sealed class TiffBuilder
         Add16(ifd, (ushort)entries.Count);
         foreach ((ushort tag, (ushort type, uint[] values)) in entries)
         {
+            // RATIONAL values are given as numerator, denominator pairs.
             byte[] raw = [.. values.SelectMany(v => type == Short ? BitConverter.GetBytes((ushort)v) : BitConverter.GetBytes(v))];
             Add16(ifd, tag);
             Add16(ifd, type);
-            Add32(ifd, (uint)values.Length);
+            Add32(ifd, (uint)(type == Rational ? values.Length / 2 : values.Length));
             if (raw.Length <= 4)
             {
                 ifd.AddRange(raw);

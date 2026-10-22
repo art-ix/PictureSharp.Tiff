@@ -159,6 +159,15 @@ internal sealed class TiffDirectory
         return denominator == 0 ? double.NaN : (double)numerator / denominator;
     }
 
+    /// <summary>Value <paramref name="index"/> of a RATIONAL entry as libtiff reads it into a float, 0 for a zero denominator.</summary>
+    // port: libtiff/tif_dirread.c TIFFReadDirEntryFloatArray, TIFF_RATIONAL: (float)numerator / (float)denominator.
+    public float GetFloat(ReadOnlySpan<byte> data, TiffEntry entry, int index)
+    {
+        uint numerator = U32(data, entry.ValueOffset + index * 8, BigEndian);
+        uint denominator = U32(data, entry.ValueOffset + index * 8 + 4, BigEndian);
+        return denominator == 0 ? 0.0F : (float)numerator / (float)denominator;
+    }
+
     /// <summary>The raw value bytes of an entry of a one-byte type (BYTE, ASCII, UNDEFINED); empty otherwise.</summary>
     public ReadOnlySpan<byte> GetBytes(ReadOnlySpan<byte> data, ushort tag) =>
         TryGet(tag, out TiffEntry e) && e.Size(Header.BigTiff) == 1 ? data.Slice(e.ValueOffset, (int)e.Count) : default;

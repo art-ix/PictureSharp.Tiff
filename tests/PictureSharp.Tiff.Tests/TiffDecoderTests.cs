@@ -103,7 +103,7 @@ public sealed class TiffDecoderTests
     [Arguments((ushort)259, (uint)6)]       // old-style JPEG
     [Arguments((ushort)259, (uint)34925)]   // LZMA
     [Arguments((ushort)259, (uint)50000)]   // Zstandard
-    [Arguments((ushort)262, (uint)8)]       // CIE L*a*b*
+    [Arguments((ushort)262, (uint)9)]       // ICC L*a*b*
     [Arguments((ushort)262, (uint)4)]       // transparency mask
     [Arguments((ushort)339, (uint)5)]       // complex integer samples
     [Arguments((ushort)339, (uint)3)]       // 8-bit floating-point samples
@@ -113,6 +113,25 @@ public sealed class TiffDecoderTests
         byte[] data = TiffBuilder.Gray(8, 4).Set(tag, TiffBuilder.Short, value).Build();
         await Assert.That(() => TestSupport.Load(data)).Throws<NotSupportedException>();
         await Assert.That(TestSupport.Identify(data).Width).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task CieLab_WithAZeroWhitePointY_IsCorrupt()
+    {
+        // As libtiff's initCIELabConversion: the white point's y divides, so 0 is invalid.
+        byte[] data = TiffBuilder.GrayStrip(4, 2, 1, new byte[4 * 2 * 3]).Set(277, TiffBuilder.Short, 3).Set(262, TiffBuilder.Short, 8)
+            .Set(258, TiffBuilder.Short, 8, 8, 8).Set(318, TiffBuilder.Rational, 3127, 10000, 0, 1).Build();
+        ImageFormatException error = Assert.ThrowsExactly<ImageFormatException>(() => TestSupport.Load(data));
+        await Assert.That(error.Message).Contains("WhitePoint");
+
+        // L* = 100, a* = b* = 0 is the file's white; libtiff maps it to sRGB without chromatic adaptation, so the default
+        // D50 white turns slightly yellow and only a D65 white point gives white (values from TIFFReadRGBAImage).
+        TiffBuilder white = TiffBuilder.GrayStrip(1, 1, 1, [255, 0, 0]).Set(277, TiffBuilder.Short, 3).Set(262, TiffBuilder.Short, 8)
+            .Set(258, TiffBuilder.Short, 8, 8, 8);
+        using Image d50 = TestSupport.Load(white.Build());
+        await Assert.That(d50[0, 0]).IsEqualTo(new Rgba32(255, 252, 222, 255));
+        using Image d65 = TestSupport.Load(white.Set(318, TiffBuilder.Rational, 3127, 10000, 3290, 10000).Build());
+        await Assert.That(d65[0, 0]).IsEqualTo(new Rgba32(255, 255, 255, 255));
     }
 
     [Test]

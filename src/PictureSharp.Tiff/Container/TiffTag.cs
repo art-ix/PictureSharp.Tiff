@@ -25,6 +25,7 @@ internal static class TiffTag
     public const ushort PageNumber = 297;
     public const ushort Software = 305;
     public const ushort Predictor = 317;
+    public const ushort WhitePoint = 318;
     public const ushort ColorMap = 320;
     public const ushort TileWidth = 322;
     public const ushort TileLength = 323;

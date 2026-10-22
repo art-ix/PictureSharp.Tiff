@@ -12,6 +12,7 @@ internal sealed class TiffLayout
     public const int Palette = 3;
     public const int Separated = 5;
     public const int YCbCr = 6;
+    public const int CieLab = 8;
 
     public const int CompressionNone = 1;
     public const int CompressionCcittRle = 2;
@@ -76,7 +77,7 @@ internal sealed class TiffLayout
 
     public int ColorSamples => Photometric switch
     {
-        Rgb or YCbCr => 3,
+        Rgb or YCbCr or CieLab => 3,
         Separated => 4,
         _ => 1,
     };
@@ -333,11 +334,18 @@ internal sealed class TiffLayout
             Separated => BitsPerSample is 8 or 16,
             Palette => BitsPerSample is 1 or 2 or 4 or 8,
             YCbCr => BitsPerSample == 8,
+            CieLab => BitsPerSample is 8 or 16,
             _ => throw new NotSupportedException($"The TIFF photometric interpretation {Photometric} is not supported."),
         };
         if (!supportedBits)
         {
             throw new NotSupportedException($"{BitsPerSample}-bit samples are not supported for the TIFF photometric interpretation {Photometric}.");
+        }
+
+        // port: libtiff/tif_getimage.c TIFFRGBAImageOK and PickContigCase: three contiguous samples, no alpha.
+        if (Photometric == CieLab && (SamplesPerPixel != 3 || Separate))
+        {
+            throw new NotSupportedException("TIFF CIE L*a*b* images are only supported with three contiguous samples.");
         }
 
         if (Photometric == Separated && (InkSet != 1 || Associated))

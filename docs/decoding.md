@@ -43,11 +43,12 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | Palette | 1, 2, 4 and 8 bits |
 | CMYK | 8 and 16 bits |
 | YCbCr | 8 bits, with subsampling (port of libtiff `tif_color.c`) |
+| CIE L*a*b* | 8 and 16 bits, three contiguous samples, with the file's `WhitePoint` (port of libtiff `tif_color.c`) |
 | Floating point | 16-bit (half), 32-bit and 64-bit greyscale and RGB |
 | Alpha | `ExtraSamples` associated (unpremultiplied) or unassociated, following Pillow's rules |
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
-LogLuv, CIE Lab, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
+LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes, transparency masks, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than
 8-bit greyscale, RGB, YCbCr or CMYK (alpha only with separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As in libtiff, WebP
 other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed under Deferred in the
 [plan](https://github.com/art-ix/PictureSharp.Tiff/blob/main/plan.md#deferred).
@@ -66,6 +67,10 @@ other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`).
   in single precision (a half converts to a float exactly), 64-bit samples in double precision.
 - Associated alpha is unpremultiplied at the source depth, before the reduction.
 - CMYK is converted as Pillow converts it (no colour management); an ICC profile is kept in the metadata.
+- CIE L*a*b* is converted exactly as libtiff's `TIFFReadRGBAImage` converts it: to XYZ relative to the `WhitePoint`
+  tag (CIE D50 without it, as Photoshop assumes), then with libtiff's sRGB display matrix and a gamma 2.4 table, in
+  single precision. There is no chromatic adaptation, so a D50 white comes out slightly yellow (255, 252, 222); a
+  D65 white point gives white.
 
 ### JPEG and WebP strips
 

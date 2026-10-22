@@ -26,7 +26,7 @@ CMYK JPEG (0.5.5) waits for a core request.**
 | 0.5.1 | Parallel strip and tile decoding; 8-bit converter fast paths | Released 2026-10-21 |
 | 0.5.2 | Vectorized automatic colour type analysis (pipeline deferred) | Released 2026-10-21 |
 | 0.5.3 | Reading: more sample formats and bit depths | Implemented, released in 0.6.0 |
-| 0.5.4 | Reading: CIELab | Planned, released in 0.6.0 |
+| 0.5.4 | Reading: CIELab | Implemented, released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Implemented, released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Planned |
 
@@ -541,6 +541,17 @@ Ordered by how often the features appear in real files. Each milestone extends t
   `putcontig8bitCIELab16` and `tif_color.c` `TIFFCIELabToRGBInit`, `TIFFCIELabToXYZ`, `TIFFXYZToRGB` with libtiff's
   `display_sRGB` and the file's white point. Oracle: libtiff `TIFFReadRGBAImage`, exact. ICCLab (9) and ITULab (10)
   stay unsupported (libtiff's RGBA path does not convert them).
+  - Done 2026-10-22 (uncommitted): `CieLabToRgb` (single precision as libtiff; the 1501-entry table from `pow` in
+    double, `RINT` in double; the three gun tables and steps are equal in `display_sRGB`, so one is kept),
+    `CieLabChunkConverter` (8-bit L* with signed a*/b* bytes, 16-bit with signed 16-bit a*/b*, both byte orders),
+    `TiffDirectory.GetFloat` (RATIONAL as `(float)num / (float)den`, libtiff `TIFFReadDirEntryFloatArray`). Default
+    WhitePoint D50 as `TIFFGetFieldDefaulted`; a zero y is `ImageFormatException`. Three contiguous samples only (no
+    alpha, no planes), as libtiff's RGBA path; predictor 2 works as for other 8/16-bit data.
+  - Corpus: `cases_054`, five libtiff files (8/16-bit, D50, D65 and D50 as chromaticities, LZW tiles with predictor,
+    PackBits, Deflate with predictor, big-endian), about 1500 distinct colours each, bit-exact with
+    `TIFFReadRGBAImage`. Tests: zero white point y; reference white at D50 (255, 252, 222: no chromatic adaptation)
+    and D65 (white). ICCLab replaces CIELab in the unsupported cases. 2786 tests pass; re-encoded corpus 952/952,
+    edited 136/136. `docs/decoding.md`, README, notices.
 - **0.5.5 — JPEG variants:** planar JPEG (each plane a one-component JPEG, decoded through `DecodeEmbeddedPart` and
   merged) and CMYK JPEG (photometric 5, four components, as Photoshop writes). Checked 2026-10-21: the core returns
   Adobe-inverted CMYK as RGB, wrong for TIFF; CMYK JPEG waits for the core request (see "Core requests"), planar JPEG

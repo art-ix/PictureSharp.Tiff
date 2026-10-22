@@ -19,7 +19,10 @@ Fax3SetupState, Fax3Decode1D, Fax3Decode2D, Fax4Decode, Fax3DecodeRLE, _TIFFFax3
 macros) with their state tables (mkg3states.c FillTable and code lists); the Group 4 encoder (tif_fax3.c
 Fax3PreEncode, Fax4Encode, Fax3Encode2DRow, putspan, find0span, find1span, _PutBits, _FlushBits, Fax4PostEncode and
 the t4.h run code tables); YCbCr to RGB (tif_color.c
-TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); packed
+TIFFYCbCrToRGBInit, TIFFYCbCrtoRGB; tif_getimage.c initYCbCrConversion and the putcontig8bitYCbCr routines); CIE
+L*a*b* to RGB (tif_color.c TIFFCIELabToRGBInit, TIFFCIELabToXYZ, TIFFCIELab16ToXYZ, TIFFXYZToRGB; tif_getimage.c
+display_sRGB, initCIELabConversion, putcontig8bitCIELab8 and putcontig8bitCIELab16); the RATIONAL to float conversion
+(tif_dirread.c TIFFReadDirEntryFloatArray); packed
 YCbCr strip sizes (tif_strip.c TIFFVStripSize64); the BigTIFF header check (tif_open.c). The Deflate output limit
 follows tif_zip.c ZIPDecode, the JPEG table handling tif_jpeg.c JPEGPreDecode and the JPEG output tags tif_jpeg.c
 JPEGSetupEncode, the WebP strip layout and limits tif_webp.c (TWebPSetupDecode, TWebPPreDecode, TWebPDecode,

@@ -10,6 +10,7 @@ internal abstract class TiffChunkConverter
     public static TiffChunkConverter Create(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout) =>
         layout.SampleFormat == TiffLayout.FormatFloat ? new FloatChunkConverter(layout, ifd.BigEndian)
         : layout.Photometric == TiffLayout.YCbCr ? new YCbCrChunkConverter(data, ifd, layout)
+        : layout.Photometric == TiffLayout.CieLab ? new CieLabChunkConverter(data, ifd, layout)
         : new IntegerChunkConverter(data, ifd, layout);
 
     /// <summary>
@@ -272,4 +273,39 @@ internal sealed class YCbCrChunkConverter(ReadOnlySpan<byte> data, TiffDirectory
             }
         }
     }
+}
+
+/// <summary>8- or 16-bit contiguous CIE L*a*b* (photometric 8) through libtiff's conversion, <see cref="CieLabToRgb"/>.</summary>
+// port: libtiff/tif_getimage.c putcontig8bitCIELab8 and putcontig8bitCIELab16.
+internal sealed class CieLabChunkConverter(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout) : TiffChunkConverter
+{
+    private readonly CieLabToRgb lab = new(data, ifd);
+    private readonly int rowBytes = (int)layout.RowBytes;
+    private readonly bool bigEndian = ifd.BigEndian;
+
+    public override void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba32> pixels, int stride)
+    {
+        for (int r = 0; r < rows; r++)
+        {
+            ReadOnlySpan<byte> row = chunk.Slice(r * rowBytes, rowBytes);
+            Span<Rgba32> output = pixels.Slice(r * stride, width);
+            if (layout.BitsPerSample == 8)
+            {
+                for (int x = 0, s = 0; x < width; x++, s += 3)
+                {
+                    output[x] = lab.Convert8(row[s], (sbyte)row[s + 1], (sbyte)row[s + 2]);
+                }
+            }
+            else
+            {
+                for (int x = 0, s = 0; x < width; x++, s += 6)
+                {
+                    output[x] = lab.Convert16(Read(row[s..]), (short)Read(row[(s + 2)..]), (short)Read(row[(s + 4)..]));
+                }
+            }
+        }
+    }
+
+    private ushort Read(ReadOnlySpan<byte> bytes) =>
+        bigEndian ? BinaryPrimitives.ReadUInt16BigEndian(bytes) : BinaryPrimitives.ReadUInt16LittleEndian(bytes);
 }
