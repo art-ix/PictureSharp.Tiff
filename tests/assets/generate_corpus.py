@@ -51,7 +51,7 @@ PHOTOMETRIC, FILLORDER, ORIENTATION, SAMPLESPERPIXEL, ROWSPERSTRIP = 262, 266, 2
 XRESOLUTION, YRESOLUTION, PLANARCONFIG, RESOLUTIONUNIT, PREDICTOR = 282, 283, 284, 296, 317
 COLORMAP, TILEWIDTH, TILELENGTH, EXTRASAMPLES, XMLPACKET, ICCPROFILE = 320, 322, 323, 338, 700, 34675
 GROUP3OPTIONS, GROUP4OPTIONS, INKSET, SAMPLEFORMAT = 292, 293, 332, 339
-YCBCRSUBSAMPLING, REFERENCEBLACKWHITE, JPEGQUALITY, JPEGCOLORMODE = 530, 532, 65537, 65538
+YCBCRCOEFFICIENTS, YCBCRSUBSAMPLING, REFERENCEBLACKWHITE, JPEGQUALITY, JPEGCOLORMODE = 529, 530, 532, 65537, 65538
 WEBP_LEVEL, WEBP_LOSSLESS = 65568, 65569
 WHITEPOINT = 318
 COMPRESSIONS = dict(none=1, lzw=5, deflate=8, packbits=32773, adobe=32946, jpeg=7, rle=2, g3=3, g4=4, rlew=32771,
@@ -162,7 +162,7 @@ def write_directory(tif, samples, bits, photometric, compression="none", predict
                     tile=None, separate=False, extra=None, colormap=None, fill_order=1, subfile=0,
                     orientation=None, resolution=None, icc=None, xmp=None, sample_format=1, t4=None, t6=None,
                     jpeg_quality=None, jpeg_rgb=False, subsampling=None, ref_black_white=None,
-                    webp_level=None, webp_lossless=False, white_point=None):
+                    webp_level=None, webp_lossless=False, white_point=None, ycbcr_coefficients=None):
     h, w, spp = samples.shape
     keep = []
     set_field(tif, IMAGEWIDTH, ctypes.c_uint32(w))
@@ -194,6 +194,10 @@ def write_directory(tif, samples, bits, photometric, compression="none", predict
         arr = (ctypes.c_float * 6)(*ref_black_white)
         keep.append(arr)
         set_field(tif, REFERENCEBLACKWHITE, arr)
+    if ycbcr_coefficients:
+        arr = (ctypes.c_float * 3)(*ycbcr_coefficients)
+        keep.append(arr)
+        set_field(tif, YCBCRCOEFFICIENTS, arr)
     if white_point:
         arr = (ctypes.c_float * 2)(*white_point)
         keep.append(arr)
@@ -272,7 +276,7 @@ def pack(samples, bits, photometric, subsampling, compression):
     return bytes(out)
 
 
-def write_tiff(path, pages, big_endian=False, big_tiff=False):
+def write_tiff(path, pages, big_endian=False, big_tiff=False, rationals=None):
     mode = (b"wb" if big_endian else b"wl") + (b"8" if big_tiff else b"")
     tif = lib.TIFFOpen(path.encode(), mode)
     if not tif:
@@ -282,6 +286,22 @@ def write_tiff(path, pages, big_endian=False, big_tiff=False):
             write_directory(tif, **page)
     finally:
         lib.TIFFClose(tif)
+    if rationals:
+        patch_rationals(path, rationals)
+
+
+def patch_rationals(path, rationals):
+    """Replaces the values of RATIONAL tags of the first IFD of a little-endian classic TIFF by exact (numerator,
+    denominator) pairs, which libtiff never writes itself (it picks power-of-two denominators)."""
+    data = bytearray(open(path, "rb").read())
+    ifd = struct.unpack_from("<I", data, 4)[0]
+    for i in range(struct.unpack_from("<H", data, ifd)[0]):
+        tag, typ, count, offset = struct.unpack_from("<HHII", data, ifd + 2 + 12 * i)
+        if tag in rationals:
+            assert typ == 5 and count == len(rationals[tag]), (path, tag)
+            for k, (n, d) in enumerate(rationals[tag]):
+                struct.pack_into("<II", data, offset + 8 * k, n, d)
+    open(path, "wb").write(bytes(data))
 
 
 # --------------------------------------------------------------------------- hand-made writers
@@ -818,6 +838,15 @@ def cases_030():
     yield "ycbcr_22_lzw_tiles", [dict(samples=ycc, bits=8, photometric="ycbcr", subsampling=(2, 2), compression="lzw", tile=(16, 16))], {}, "libtiff"
     yield "ycbcr_11_separate_refbw", [dict(samples=ycc, bits=8, photometric="ycbcr", subsampling=(1, 1), separate=True,
                                            ref_black_white=[16, 235, 128, 240, 128, 240])], {}, "libtiff"
+    # BT.709 coefficients and a fractional ReferenceBlackWhite as rationals whose single-precision quotient
+    # (float)n / (float)d, which libtiff reads, differs in the last bit from the double-precision one; the black
+    # level of Y has a zero denominator, which libtiff reads as 0.
+    yield "ycbcr_22_bt709_fractional_refbw", [dict(samples=ycc, bits=8, photometric="ycbcr", subsampling=(2, 2), rows_per_strip=8,
+                                                   ycbcr_coefficients=[0.2126, 0.7152, 0.0722],
+                                                   ref_black_white=[15.7, 235.3, 128.1, 240.2, 127.9, 239.6])], dict(rationals={
+        YCBCRCOEFFICIENTS: [(212599957, 1000000007), (715199968, 1000000007), (72199950, 1000000007)],
+        REFERENCEBLACKWHITE: [(157000101, 0), (2353004270, 10000019), (1281002267, 10000019),
+                              (2402004363, 10000019), (1279002255, 10000019), (2396004385, 10000019)]}), "libtiff"
 
     big = photo(64, 48, 6)
     yield "jpeg_ycbcr_strips", [dict(samples=big, bits=8, photometric="ycbcr", compression="jpeg", jpeg_rgb=True, jpeg_quality=90, rows_per_strip=16)], {}, "jpeg"

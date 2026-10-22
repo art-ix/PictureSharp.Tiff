@@ -6,8 +6,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 (2026-10-21).
 
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
-JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Next: stabilization towards
-1.0 (see "Next: 0.6.1–1.0.0"), not started.**
+JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
+(see "Next: 0.6.1–1.0.0"): 0.6.1 done, not released; 0.7.0 next.**
 
 ## Versions
 
@@ -29,7 +29,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.5.4 | Reading: CIELab | Released in 0.6.0 |
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
-| 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Planned |
+| 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Done, not released |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Planned (downloads need approval) |
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Planned |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
@@ -659,6 +659,16 @@ stable. The milestones below each end in a NuGet release unless noted; their ord
 - README: a short maturity note ("ready for use; the API may still change before 1.0"), and the core README footnote ²
   mentions what 0.6.0 reads.
 - DoD: tests and `verify_written.py` unchanged; release notes. May be folded into 0.7.0 instead of its own release.
+
+Done 2026-10-22, not released (VERSION stays 0.6.0). Decisions and deviations:
+- libtiff writes RATIONAL tags with power-of-two denominators, so the float and double quotients agree on every file
+  it writes; the new corpus file `ycbcr_22_bt709_fractional_refbw.tif` patches exact rationals in afterwards
+  (`patch_rationals` in the generator). A last-bit difference alone changed no pixel; the zero denominator, which
+  libtiff reads as 0 and the old code as NaN, is what makes the file fail on the old code (10 tests).
+- The core README footnote ² now lists what the plugin reads (core repo, uncommitted).
+- Left for 0.7.0: libtiff also accepts these tags as BYTE, SHORT, LONG, SRATIONAL, FLOAT or DOUBLE
+  (`TIFFReadDirEntryFloatArray`); the plugin keeps the defaults for any type but RATIONAL. Add it if a real file
+  needs it.
 
 ### 0.7.0 — real-world files
 

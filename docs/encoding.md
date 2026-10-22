@@ -114,8 +114,8 @@ Lossless output (all compressions except JPEG and lossy WebP) reads back exactly
 writes from the same samples, so their compression ratio is libtiff's. Deflate depends on the runtime's zlib, so its
 bytes can differ between platforms; the pixels do not.
 
-The validation writes 62 byte-exact snapshots and the 91 corpus images with every compression and as LZW tiles in
-BigTIFF (637 files) and checks them with `tests/assets/verify_written.py`. It also documents two limits of the oracles:
+The validation writes 62 byte-exact snapshots and the 137 corpus images with every compression and as LZW tiles in
+BigTIFF (959 files) and checks them with `tests/assets/verify_written.py`. It also documents two limits of the oracles:
 libtiff 4.5.1 misplaces grey-with-alpha pixels in tiles cut by the right edge (its own files too), and Pillow 10.2.0
 cannot follow BigTIFF EXIF pointers (type IFD8).
 

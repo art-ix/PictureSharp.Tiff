@@ -62,7 +62,8 @@ internal sealed class YCbCrToRgb
             (byte)Math.Clamp(yv + cbB[cb], 0, 255));
     }
 
-    // libtiff reads the RATIONAL tags as floats; a tag with the wrong count or type keeps the default.
+    // libtiff reads the RATIONAL tags as (float)numerator / (float)denominator; a tag with the wrong count or type
+    // keeps the default.
     private static float[] Floats(ReadOnlySpan<byte> data, TiffDirectory ifd, ushort tag, float[] fallback)
     {
         if (!ifd.TryGet(tag, out TiffEntry entry) || entry.Type != TiffEntry.Rational || entry.Count < fallback.Length)
@@ -73,7 +74,7 @@ internal sealed class YCbCrToRgb
         var values = new float[fallback.Length];
         for (int i = 0; i < values.Length; i++)
         {
-            values[i] = (float)ifd.GetRational(data, entry, i);
+            values[i] = ifd.GetFloat(data, entry, i);
         }
 
         return values;

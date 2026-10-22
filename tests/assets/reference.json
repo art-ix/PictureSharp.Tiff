@@ -871,6 +871,12 @@
   "oracle": "libtiff",
   "sha256": "7fe57126ad6c1547dfe09a75448abd7999dfa88dde3ea5f91677c373dfcc96bc"
  },
+ "ycbcr_22_bt709_fractional_refbw.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "libtiff",
+  "sha256": "481fe083dac188344599b8fe52eedac3c62dbd2b549de54b259e7c68e8866785"
+ },
  "ycbcr_22_lzw_tiles.tif": {
   "width": 37,
   "height": 23,
