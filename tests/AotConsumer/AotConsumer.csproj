@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Native AOT check (0.7.1): published per platform in CI, not part of PictureSharp.Tiff.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/PictureSharp.Tiff/PictureSharp.Tiff.csproj" />
+  </ItemGroup>
+</Project>
