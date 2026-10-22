@@ -66,7 +66,8 @@ internal sealed class TiffColorConverter
             Rgba32[] colors = palette!;
             for (int x = 0; x < pixels.Length; x++)
             {
-                pixels[x] = colors[row[x * samples]];
+                Rgba32 c = colors[row[x * samples]];
+                pixels[x] = alpha >= 0 ? new Rgba32(c.R, c.G, c.B, To8(row[x * samples + alpha])) : c;
             }
 
             return;
@@ -104,7 +105,8 @@ internal sealed class TiffColorConverter
             Rgba32[] colors = palette!;
             for (int x = 0; x < pixels.Length; x++)
             {
-                pixels[x] = colors[row[x * samples]];
+                Rgba32 c = colors[row[x * samples]];
+                pixels[x] = alpha >= 0 ? new Rgba32(c.R, c.G, c.B, row[x * samples + alpha]) : c;
             }
 
             return;

@@ -28,21 +28,8 @@ internal static class TiffPixelDecoder
         ReadOnlySpan<byte> bytes = data.Span;
         long perPlane = layout.ChunksPerPlane;
         long chunks = perPlane * layout.Planes;
-        ushort offsetsTag = layout.Tiled ? TiffTag.TileOffsets : TiffTag.StripOffsets;
-        ushort countsTag = layout.Tiled ? TiffTag.TileByteCounts : TiffTag.StripByteCounts;
-        if (!ifd.TryGet(offsetsTag, out TiffEntry offsets) || offsets.Count < chunks || !TiffEntry.IsInteger(offsets.Type))
-        {
-            throw TiffDecoder.Error($"The TIFF image needs {chunks} {(layout.Tiled ? "tile" : "strip")} offsets.");
-        }
-
-        // port: libtiff/tif_dirread.c EstimateStripByteCounts, for uncompressed data only: each chunk is assumed full.
-        bool hasCounts = ifd.TryGet(countsTag, out TiffEntry counts) && TiffEntry.IsInteger(counts.Type);
-        if (hasCounts ? counts.Count < chunks : layout.Compression != TiffLayout.CompressionNone)
-        {
-            throw TiffDecoder.Error($"The TIFF image needs {chunks} {(layout.Tiled ? "tile" : "strip")} byte counts.");
-        }
-
-        var job = new Job(data, ifd, layout, offsets, hasCounts ? counts : null, pixels, context,
+        var chunkTable = TiffChunks.Read(bytes, ifd, layout);
+        var job = new Job(data, ifd, layout, chunkTable, pixels, context,
             layout.IsJpeg && !layout.Separate ? null : TiffChunkConverter.Create(bytes, ifd, layout),
             layout.IsJpeg ? new TiffJpeg(bytes, ifd, layout) : null);
         if (layout.Compression == TiffLayout.CompressionLzw)
@@ -173,7 +160,7 @@ internal static class TiffPixelDecoder
     {
         try
         {
-            ReadOnlyMemory<byte> raw = Raw(job.Data, job.Ifd.GetULong(job.Data.Span, job.Offsets, 0), job.Ifd.GetULong(job.Data.Span, job.Counts!.Value, 0));
+            ReadOnlyMemory<byte> raw = Raw(job.Data, job.Chunks.Offset(job.Data.Span, 0), job.Chunks.Count(job.Data.Span, 0, (int)job.Layout.ChunkBytes(job.Layout.ChunkHeight)));
             Span<byte> head = stackalloc byte[Math.Min(raw.Length, 2)];
             if (job.Layout.ReverseBits)
             {
@@ -279,7 +266,7 @@ internal static class TiffPixelDecoder
     }
 
     /// <summary>What every thread shares: the file, the image and the read-only converter or JPEG tables.</summary>
-    private sealed record Job(ReadOnlyMemory<byte> Data, TiffDirectory Ifd, TiffLayout Layout, TiffEntry Offsets, TiffEntry? Counts,
+    private sealed record Job(ReadOnlyMemory<byte> Data, TiffDirectory Ifd, TiffLayout Layout, TiffChunks Chunks,
         Memory<Rgba32> Pixels, ImageDecodeContext Context, TiffChunkConverter? Converter, TiffJpeg? Jpeg)
     {
         public bool LzwCompat { get; init; }
@@ -317,7 +304,7 @@ internal static class TiffPixelDecoder
             Span<Rgba32> pixels = job.Pixels.Span[(cy * width + cx)..];
             if (job.Jpeg is not null && !layout.Separate)
             {
-                ReadOnlyMemory<byte> raw = Raw(data, ifd.GetULong(bytes, job.Offsets, (int)c), ifd.GetULong(bytes, job.Counts!.Value, (int)c));
+                ReadOnlyMemory<byte> raw = Raw(data, job.Chunks.Offset(bytes, c), job.Chunks.Count(bytes, c, (int)layout.ChunkBytes(layout.ChunkHeight)));
                 job.Jpeg.Decode(raw, job.Context, visibleWidth, visibleRows, pixels, width);
                 return;
             }
@@ -328,8 +315,7 @@ internal static class TiffPixelDecoder
             if (InPlace(layout))
             {
                 // Read in place: no predictor applies to uncompressed data and the converter only reads.
-                ulong count = job.Counts is { } counts ? ifd.GetULong(bytes, counts, (int)c) : (ulong)length;
-                chunk = Raw(data, ifd.GetULong(bytes, job.Offsets, (int)c), count);
+                chunk = Raw(data, job.Chunks.Offset(bytes, c), job.Chunks.Count(bytes, c, length));
                 CheckLength(chunk, length);
             }
             else
@@ -338,8 +324,8 @@ internal static class TiffPixelDecoder
                 {
                     int index = (int)(p * layout.ChunksPerPlane + c);
                     Span<byte> output = buffer.AsSpan(p * planeBytes, length);
-                    ulong offset = ifd.GetULong(bytes, job.Offsets, index);
-                    ulong count = job.Counts is { } counts ? ifd.GetULong(bytes, counts, index) : (ulong)output.Length;
+                    ulong offset = job.Chunks.Offset(bytes, index);
+                    ulong count = job.Chunks.Count(bytes, index, output.Length);
                     if (job.Jpeg is not null)
                     {
                         job.Jpeg.DecodePlane(Raw(data, offset, count), job.Context, visibleWidth, visibleRows, output);

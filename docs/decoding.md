@@ -37,10 +37,10 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | | Supported |
 | --- | --- |
 | Container | classic TIFF and BigTIFF, little- and big-endian; strips or tiles; contiguous or planar samples |
-| Compression | none, PackBits, LZW (also the old LSB-first variant), Deflate (8 and 32946), JPEG (7), WebP (50001), CCITT RLE, RLEW, Group 3 (1D and 2D) and Group 4; `FillOrder` 2 |
-| Predictor | horizontal (2) for 8-, 16- and 32-bit integers and floating point (3), with LZW and Deflate |
+| Compression | none, PackBits, LZW (also the old LSB-first variant), Deflate (8 and 32946), JPEG (7), WebP (50001), CCITT RLE, RLEW, Group 3 (1D and 2D) and Group 4 (bilevel or 1-bit palette); `FillOrder` 2 |
+| Predictor | horizontal (2) for 8-, 16-, 32- and 64-bit samples (floating point too, differenced as integers, as libtiff does) and floating point (3), with LZW and Deflate |
 | Greyscale, RGB | unsigned 1 to 16 and 32 bits; signed 8, 16 and 32 bits; black or white is zero for greyscale |
-| Palette | 1, 2, 4 and 8 bits |
+| Palette | 1, 2, 4 and 8 bits; 8 bits with straight alpha (`ExtraSamples` 2, Pillow's "PA") |
 | CMYK | 8 and 16 bits |
 | YCbCr | 8 bits, with subsampling (port of libtiff `tif_color.c`) |
 | CIE L*a*b* | 8 and 16 bits, three contiguous samples, with the file's `WhitePoint` (port of libtiff `tif_color.c`) |
@@ -48,8 +48,8 @@ for (int page = 0; page < info.ContainerItemCount; page++)
 | Alpha | `ExtraSamples` associated (unpremultiplied) or unassociated, following Pillow's rules |
 
 Not supported, with `NotSupportedException`: old-style JPEG (6), JBIG, LZMA, Zstandard, LERC, JPEG 2000, PixarLog,
-LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes, transparency masks, complex
-samples, integer samples of 17 to 31 or 64 bits, JPEG other than 8-bit greyscale, RGB, YCbCr or CMYK (alpha only with
+NeXT, ThunderScan, LogLuv, ICC L*a*b* (9) and ITU L*a*b* (10), CIE L*a*b* with alpha or separate planes,
+transparency masks, palettes with alpha other than 8-bit straight, complex samples, integer samples of 17 to 31 or 64 bits, JPEG other than 8-bit greyscale, RGB, YCbCr or CMYK (alpha only with
 separate planes; planar YCbCr only without subsampling), and WebP with a photometric interpretation other than RGB. As
 in libtiff, WebP other than 3 or 4 contiguous 8-bit samples is an error (`ImageFormatException`). Old-style JPEG,
 Zstandard and JBIG are discussed under Deferred in the
@@ -64,7 +64,8 @@ Zstandard and JBIG are discussed under Deferred in the
 - Signed samples (`SampleFormat` 2) are offset by `2^(b - 1)` and then reduced as unsigned samples of the same depth,
   so the whole range maps linearly: the minimum to 0, zero to 128 (for 8 bits) and the maximum to 255. Negative values
   are not clamped to 0. libtiff's `TIFFReadRGBAImage` reinterprets the bits as unsigned instead.
-- 16-bit colour map entries: `round(v / 257)`.
+- 16-bit colour map entries: `round(v / 257)`. libtiff and Pillow take the high byte (`v >> 8`), so palette colours
+  can be 1 higher than theirs.
 - Floating point: clamped to [0, 1], then `(int)(v * 255 + 0.5)`; NaN becomes 0. 16- and 32-bit samples are computed
   in single precision (a half converts to a float exactly), 64-bit samples in double precision.
 - Associated alpha is unpremultiplied at the source depth, before the reduction.
@@ -102,9 +103,16 @@ plane may also hold alpha; a plane with more than one component is an error (`Im
 
 ## Errors
 
-- Corrupt or truncated data throws `ImageFormatException`: offsets outside the file, IFD loops, missing required tags,
+- Corrupt or truncated data throws `ImageFormatException`: offsets outside the file, missing required tags,
   short strips. A byte count past the end of the file is cut to the file, as libtiff does for memory-mapped files, and
-  data after the end of a compressed strip is ignored.
+  data after the end of a compressed strip is ignored. An IFD chain that loops or links outside the file ends there,
+  keeping the pages before it, as in libtiff.
+- Strip and tile arrays are read as libtiff reads them: `StripOffsets` and `TileOffsets` (and the byte count tags)
+  stand in for each other, any integer type is accepted (signed ones too; a negative value is an error), and byte
+  counts that are missing (one compressed strip per plane, or uncompressed data), zero, or implausible for
+  uncompressed data (more than the file holds or less than the image needs in a single strip; first two strips of
+  different sizes) are replaced by libtiff's estimate. `BitsPerSample` and `SampleFormat` must agree for the first
+  `SamplesPerPixel` values only.
 - Valid files using a feature listed above as not supported throw `NotSupportedException`.
 - No other exception type escapes for malformed input; this is tested with mutated and truncated corpus files.
 
@@ -139,3 +147,12 @@ python3 -I benchmarks/libtiff_speed.py /tmp/tiff/photo.none.tif
 Every corpus file (written by libtiff 4.5.1 and ImageMagick 6, both byte orders, classic and BigTIFF) decodes exactly
 to the pixels of Pillow 10.2.0, of libtiff `TIFFReadRGBAImage` where its conversion is exact, or of the rules above;
 every page of the multi-page files is checked. The corpus is regenerated with `tests/assets/generate_corpus.py`.
+
+Real-world files (0.7.0, not committed): 420 files from libtiff's test images and `pics-3.8.0`, GDAL 3.9.0's
+autotest data, Pillow 10.2.0's test images and ExifTool 12.76 (466 IFDs). Every page libtiff converts cleanly
+decodes to its `TIFFReadRGBAImage` raster, exactly or within the rounding differences above (325 exact, 35 within
+1); 56 pages libtiff does not convert (other depths, floating point, 16-bit CMYK) match the rules above applied to
+the samples libtiff decodes. Files libtiff rejects or decodes only with errors throw `ImageFormatException` or
+`NotSupportedException` here; 21 pages that libtiff converts use a feature listed as not supported (old-style JPEG,
+LogLuv, Zstandard, LZMA, LERC, NeXT, ThunderScan, JPEG with contiguous alpha). `Image.EditMetadata` leaves every
+page of the 396 editable files decoding as before, in this decoder and in libtiff.

@@ -114,7 +114,8 @@ def expected(samples, bits, photometric, extra=None, colormap=None):
         cmap = (np.asarray(colormap, np.int64).reshape(3, -1) + 128) // 257
         idx = samples[..., 0].astype(np.int64)
         rgb = np.stack([cmap[0][idx], cmap[1][idx], cmap[2][idx]], -1).astype(np.uint8)
-        return np.dstack([rgb, np.full((h, w), 255, np.uint8)])
+        a8 = samples[..., 1].astype(np.uint8) if extra == "straight" else np.full((h, w), 255, np.uint8)
+        return np.dstack([rgb, a8])
     dtype = object if bits > 16 else np.int64
     color = samples[..., :color_count].astype(dtype)
     if photometric == "miniswhite":
@@ -361,11 +362,17 @@ def lzw_old_style(data):
     return bytes(out)
 
 
-def write_classic(path, w, h, bits, spp, photometric, compression, strips, byte_counts=True, order="<", extra_entries=()):
-    """A TIFF with the given strips in byte order `order`; byte_counts=False omits StripByteCounts."""
-    entries = [(IMAGEWIDTH, 4, [w]), (IMAGELENGTH, 4, [h]), (BITSPERSAMPLE, 3, [bits] * spp),
-               (COMPRESSION, 3, [compression]), (PHOTOMETRIC, 3, [photometric]),
-               (SAMPLESPERPIXEL, 3, [spp]), (ROWSPERSTRIP, 4, [-(-h // len(strips))])]
+def write_classic(path, w, h, bits, spp, photometric, compression, strips, byte_counts=True, order="<", extra_entries=(),
+                  counts=None, types=None, tile=None, tags=(273, 279), bits_values=None):
+    """A TIFF with the given strips in byte order `order`; byte_counts=False omits StripByteCounts. `counts` replaces
+    the byte counts, `types` maps a tag to another field type (signed 6, 8 or 9 too), `tile` (width, height) makes the
+    chunks tiles, `tags` names the offset and byte count tags and `bits_values` replaces the BitsPerSample values."""
+    types = types or {}
+    entries = [(IMAGEWIDTH, 4, [w]), (IMAGELENGTH, 4, [h]), (BITSPERSAMPLE, 3, bits_values or [bits] * spp),
+               (COMPRESSION, 3, [compression]), (PHOTOMETRIC, 3, [photometric]), (SAMPLESPERPIXEL, 3, [spp])]
+    entries.append((TILEWIDTH, 4, [tile[0]]) if tile else (ROWSPERSTRIP, 4, [-(-h // len(strips))]))
+    if tile:
+        entries.append((TILELENGTH, 4, [tile[1]]))
     header = 8
     blob = bytearray()
     offsets = []
@@ -374,9 +381,9 @@ def write_classic(path, w, h, bits, spp, photometric, compression, strips, byte_
         blob += s
         if len(blob) % 2:
             blob += b"\0"
-    entries.append((273, 4, offsets))
+    entries.append((tags[0], types.get(tags[0], 4), offsets))
     if byte_counts:
-        entries.append((279, 4, [len(s) for s in strips]))
+        entries.append((tags[1], types.get(tags[1], 4), counts if counts is not None else [len(s) for s in strips]))
     entries += list(extra_entries)
     entries.sort()
     ifd_offset = header + len(blob)
@@ -384,7 +391,7 @@ def write_classic(path, w, h, bits, spp, photometric, compression, strips, byte_
     ifd = bytearray(struct.pack(order + "H", len(entries)))
     data_offset = ifd_offset + 2 + 12 * len(entries) + 4
     for tag, typ, values in entries:
-        fmt = order + ("H" if typ == 3 else "I")
+        fmt = order + {3: "H", 6: "b", 8: "h", 9: "i"}.get(typ, "I")
         raw = b"".join(struct.pack(fmt, v) for v in values)
         if len(raw) <= 4:
             ifd += struct.pack(order + "HHI", tag, typ, len(values)) + raw.ljust(4, b"\0")
@@ -880,6 +887,16 @@ def cases_030():
     yield "bigtiff_pages", [dict(samples=rgb[::4, ::4].copy(), bits=8, photometric="rgb", subfile=1),
                             dict(samples=rgb, bits=8, photometric="rgb", compression="deflate")], dict(big_tiff=True), "model"
 
+    # 0.7.0: an 8-bit palette with straight alpha (Pillow's "PA"; libtiff ignores the alpha) and a 1-bit palette in
+    # Group 4 (GDAL's slim_g4; libtiff's fax codec only needs one bit per sample).
+    rng070 = np.random.default_rng(70)
+    pa_map = [int(v) * 257 for v in rng070.integers(0, 256, 768)]
+    pa = np.dstack([rng070.integers(0, 256, (h, w), dtype=np.uint8), alpha(w, h)])
+    yield "palette8_alpha_lzw", [dict(samples=pa, bits=8, photometric="palette", colormap=pa_map, extra=[2], compression="lzw")], {}, "model"
+    yield "palette8_alpha_separate", [dict(samples=pa, bits=8, photometric="palette", colormap=pa_map, extra=[2], separate=True)], {}, "model"
+    yield "palette1_g4", [dict(samples=s(bilevel), bits=1, photometric="palette", colormap=[0, 51400, 0, 26214, 0, 65535],
+                               compression="g4")], {}, "libtiff"
+
     # 0.4.0 page selection: pages of different sizes, layouts and colour models, with reduced-resolution IFDs between.
     small = photo(19, 11, 12)
     cmap = [int(v) * 257 for v in rng.integers(0, 256, 768)]
@@ -983,6 +1000,12 @@ def cases_053(w, h, rgb, gray, s):
         yield f"{name}_rgb_be", [dict(samples=ft, bits=bits, photometric="rgb", sample_format=3, rows_per_strip=5)], dict(big_endian=True), "float"
         pre = np.dstack([(np.clip(ft, 0, 1) * fat[..., None]).astype(t), fat]).astype(t)
         yield f"{name}_rgba_assoc", [dict(samples=pre, bits=bits, photometric="rgb", sample_format=3, extra=[1], compression="lzw", predictor=3)], {}, "float-assoc"
+    # Horizontal differencing (predictor 2) of floating-point samples as integers of the same width, as GDAL and the
+    # libtiff test images write it (0.7.0).
+    yield "float16_rgb_lzw_predictor2", [dict(samples=f.astype(np.float16), bits=16, photometric="rgb", sample_format=3, compression="lzw", predictor=2, rows_per_strip=8)], {}, "float"
+    yield "float32_gray_deflate_predictor2_be", [dict(samples=fgray.astype(np.float32), bits=32, photometric="minisblack", sample_format=3, compression="deflate", predictor=2)], dict(big_endian=True), "float"
+    yield "float64_rgb_lzw_predictor2_tiles", [dict(samples=f, bits=64, photometric="rgb", sample_format=3, compression="lzw", predictor=2, tile=(16, 16))], {}, "float"
+    yield "float64_gray_deflate_predictor2_be", [dict(samples=fgray, bits=64, photometric="minisblack", sample_format=3, compression="deflate", predictor=2, rows_per_strip=6)], dict(big_endian=True), "float"
     yield "float16_miniswhite_separate", [dict(samples=np.dstack([fgray.astype(np.float16), fa.astype(np.float16)[..., None]]), bits=16,
                                                photometric="miniswhite", sample_format=3, extra=[2], separate=True)], {}, "float"
 
@@ -1051,6 +1074,28 @@ def main():
     write_classic(os.path.join(CORPUS, "gray8_lzw_old_style.tif"), w, h, 8, 1, 1, 5, strips)
     record("gray8_lzw_old_style", expected(noise[..., None], 8, "minisblack"), True)
 
+    # 0.7.0: strip and tile arrays as libtiff reads them (tif_dirread.c): the byte count checks, either tag of a pair,
+    # signed types. libtiff's TIFFReadRGBAImage must match the model.
+    def chunk_case(name, samples, compression, chunks, **kw):
+        h, w, spp = samples.shape
+        write_classic(os.path.join(CORPUS, name + ".tif"), w, h, 8, spp, 1 if spp == 1 else 2, compression, chunks, **kw)
+        want = expected(samples, 8, "minisblack" if spp == 1 else "rgb")
+        if not np.array_equal(libtiff_rgba(os.path.join(CORPUS, name + ".tif")), want):
+            raise SystemExit(f"{name}: libtiff differs from the model")
+        record(name, want, False, oracle="libtiff")
+
+    g = photo(23, 9, 70)[..., :1].copy()
+    rgb4 = photo(10, 8, 71)
+    chunk_case("gray8_single_strip_short_count", g, 1, [g.tobytes()], counts=[3])
+    chunk_case("gray8_deflate_zero_count", g, 8, [zlib.compress(g.tobytes())], counts=[0])
+    chunk_case("gray8_deflate_no_bytecounts", g, 8, [zlib.compress(g.tobytes())], byte_counts=False)
+    chunk_case("rgb8_wrong_bytecounts", rgb4, 1, [rgb4[y:y + 2].tobytes() for y in range(0, 8, 2)], counts=[7, 9, 11, 13])
+    tiles = [np.pad(g, ((0, 7), (0, 9), (0, 0)))[ty:ty + 16, tx:tx + 16].tobytes() for ty in (0,) for tx in (0, 16)]
+    chunk_case("gray8_tiles_in_strip_tags", g, 1, tiles, tile=(16, 16))
+    # Pillow's tiff_wrong_bits_per_sample_2: four BitsPerSample values for three samples; libtiff checks the first three.
+    chunk_case("rgb8_extra_bitspersample", rgb4, 1, [rgb4.tobytes()], bits_values=[8, 8, 8, 1])
+    chunk_case("rgb8_signed_offsets", rgb4, 1, [rgb4[y:y + 4].tobytes() for y in (0, 4)], types={273: 9, 279: 8})
+
     rgb = photo(19, 11, 4)
     write_classic(os.path.join(CORPUS, "rgb8_no_bytecounts.tif"), 19, 11, 8, 3, 2, 1,
                   [rgb[y:y + 4].tobytes() for y in range(0, 11, 4)], byte_counts=False)
@@ -1075,7 +1120,11 @@ def main():
             record(name, cmyk_expected(smp, page["bits"]), page["bits"] == 8 and smp.shape[2] == 4)
         elif kind in ("float", "float-assoc"):
             want = float_expected(smp, page["photometric"], assoc=kind == "float-assoc")
-            if smp.shape[2] == 1 and smp.dtype == np.float32:
+            if smp.shape[2] == 1 and smp.dtype == np.float32 and page.get("predictor") == 2 and opts.get("big_endian"):
+                # Pillow 10.2.0 swaps big-endian floats again after libtiff's swabHorAcc32 has made them native;
+                # libtiff itself must read back the source samples.
+                assert np.array_equal(libtiff_float_samples(path), smp), name
+            elif smp.shape[2] == 1 and smp.dtype == np.float32:
                 # Pillow reads single-sample float images; the rule applied to its values must give the same.
                 with Image.open(path) as im:
                     assert np.array_equal(float_to8(np.asarray(im)), want[..., 0]), name

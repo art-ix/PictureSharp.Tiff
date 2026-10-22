@@ -51,8 +51,11 @@ File.WriteAllBytes("scan.tif", edited);
 
 - The page's directory is copied to the end of the file with only the changed kinds of tags replaced, and the link
   that pointed at the old directory is patched, as libtiff's `TIFFRewriteDirectory` does. Strips, tiles and the other
-  pages stay byte-identical; the file keeps its byte order and variant (classic or BigTIFF).
+  pages stay byte-identical; the file keeps its byte order and variant (classic or BigTIFF). In a chain that loops
+  back to the old directory, that link is patched too, so the pages stay the same.
 - `TiffDecoderOptions.Page` in the decoder options selects the page to edit.
+- A page whose strips or tiles extend past the end of the file, or with tags whose values lie outside it, throws
+  `ImageFormatException`: the appended directory would take the place of the missing data.
 - Gamma, chromaticities and sRGB rendering intent have no TIFF tags here and throw `NotSupportedException`.
 
 Validation: EXIF written by the encoder is read back the same by Pillow (`getexif`) and libtiff

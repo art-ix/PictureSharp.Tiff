@@ -196,13 +196,20 @@ public sealed class TiffDecoderTests
 
     [Test]
     [Arguments((ushort)273, (uint)0x7FFF_FFF0)]   // strip outside the file
-    [Arguments((ushort)279, (uint)3)]             // strip shorter than the image
     [Arguments((ushort)278, (uint)0)]             // zero rows per strip
     [Arguments((ushort)278, (uint)1)]             // four strips, one offset
     [Arguments((ushort)256, (uint)0)]             // zero width
     public async Task CorruptLayout_ThrowsImageFormatException(ushort tag, uint value)
     {
         byte[] data = TiffBuilder.Gray(8, 4).Set(tag, TiffBuilder.Long, value).Build();
+        await Assert.That(() => TestSupport.Load(data)).Throws<ImageFormatException>();
+    }
+
+    [Test]
+    public async Task NegativeStripOffset_ThrowsImageFormatException()
+    {
+        // libtiff reads strip arrays of signed types too, but rejects a negative value.
+        byte[] data = TiffBuilder.Gray(8, 4).Set(273, 9, 0xFFFF_FFF8).Build();
         await Assert.That(() => TestSupport.Load(data)).Throws<ImageFormatException>();
     }
 

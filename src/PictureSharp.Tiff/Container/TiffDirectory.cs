@@ -11,11 +11,12 @@ internal sealed class TiffDirectory
 {
     private readonly TiffEntry[] entries;
 
-    private TiffDirectory(TiffEntry[] entries, TiffHeader header, ulong next)
+    private TiffDirectory(TiffEntry[] entries, TiffHeader header, ulong next, int outsideFile)
     {
         this.entries = entries;
         Header = header;
         Next = next;
+        OutsideFile = outsideFile;
     }
 
     public TiffHeader Header { get; }
@@ -27,6 +28,9 @@ internal sealed class TiffDirectory
 
     public ReadOnlySpan<TiffEntry> Entries => entries;
 
+    /// <summary>The number of entries dropped because their values lie outside the file.</summary>
+    public int OutsideFile { get; }
+
     public static TiffDirectory Parse(ReadOnlySpan<byte> data, TiffHeader header, ulong offset)
     {
         if (!TryCount(data, header, offset, out int count))
@@ -36,6 +40,7 @@ internal sealed class TiffDirectory
 
         var entries = new List<TiffEntry>(count);
         var seen = new HashSet<ushort>();
+        int outsideFile = 0;
         int entrySize = header.EntrySize, inline = header.OffsetSize;
         int pos = (int)offset + header.CountSize;
         for (int i = 0; i < count; i++, pos += entrySize)
@@ -54,6 +59,7 @@ internal sealed class TiffDirectory
             ulong valueOffset = length <= (ulong)inline ? (ulong)valueField : header.ReadOffset(data, valueField);
             if (valueOffset > (ulong)data.Length || length > (ulong)data.Length - valueOffset)
             {
+                outsideFile++;
                 continue;
             }
 
@@ -61,7 +67,7 @@ internal sealed class TiffDirectory
             entries.Add(new TiffEntry(tag, type, (uint)values, (int)valueOffset));
         }
 
-        return new TiffDirectory([.. entries], header, NextOffset(data, header, offset, count));
+        return new TiffDirectory([.. entries], header, NextOffset(data, header, offset, count), outsideFile);
     }
 
     /// <summary>Parses an IFD that a tag points to (EXIF, GPS), or returns null when it lies outside the file.</summary>

@@ -246,4 +246,60 @@ public sealed class MetadataWriteTests
         int ifd = be ? (file[4] << 24) | (file[5] << 16) | (file[6] << 8) | file[7] : BitConverter.ToInt32(file, 4);
         return [.. Enumerable.Range(0, U16(ifd)).Select(i => U16(ifd + 2 + (i * 12)))];
     }
+
+    [Test]
+    [Arguments(1, 0)]
+    [Arguments(2, 0)]
+    [Arguments(2, 1)]
+    public async Task EditMetadata_OnAnIfdLoop_KeepsThePages(int pages, int page)
+    {
+        // As libtiff's test_ifd_loop_to_self and test_ifd_loop_to_first: the last IFD links back to the first.
+        using Image source = EncoderSupport.Pattern(9, 7);
+        if (pages == 2)
+        {
+            using Image second = EncoderSupport.Pattern(9, 7, gray: true);
+            source.Frames.AddClone(second.Frames[0]);
+        }
+
+        byte[] file = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw));
+        List<(int Offset, int Link)> chain = Chain(file);
+        BitConverter.TryWriteBytes(file.AsSpan(chain[^1].Link), chain[0].Offset);
+        string[] before = [.. Enumerable.Range(0, pages).Select(p => Hash(file, p))];
+
+        byte[] edited = Image.EditMetadata(file, metadata => metadata.Orientation = ExifOrientation.RightTop, TestSupport.Options with
+        {
+            FormatOptions = [new TiffDecoderOptions { Page = page }],
+        });
+
+        // The old IFD of the page is no longer reachable: the chain holds the same number of IFDs, the new one in its
+        // place, and still loops.
+        List<(int Offset, int Link)> after = Chain(edited);
+        await Assert.That(after.Count).IsEqualTo(pages);
+        await Assert.That(after[page].Offset).IsGreaterThanOrEqualTo(file.Length);
+        await Assert.That(BitConverter.ToInt32(edited, after[^1].Link)).IsEqualTo(after[0].Offset);
+        await Assert.That(TestSupport.Identify(edited).ContainerItemCount).IsEqualTo(pages);
+        await Assert.That(Enumerable.Range(0, pages).Select(p => Hash(edited, p))).IsEquivalentTo(before);
+        await Assert.That(Image.ReadMetadata(edited, TestSupport.Options with { FormatOptions = [new TiffDecoderOptions { Page = page }] }).Orientation)
+            .IsEqualTo(ExifOrientation.RightTop);
+    }
+
+    private static string Hash(byte[] file, int page)
+    {
+        using Image image = TestSupport.Load(file, TestSupport.Page(page));
+        return TestSupport.Sha256(image);
+    }
+
+    // The IFDs of a little-endian classic file and the position of each one's next-IFD offset, up to a repeat.
+    private static List<(int Offset, int Link)> Chain(byte[] file)
+    {
+        var chain = new List<(int Offset, int Link)>();
+        for (int ifd = BitConverter.ToInt32(file, 4); ifd != 0 && chain.TrueForAll(c => c.Offset != ifd);)
+        {
+            int link = ifd + 2 + (BitConverter.ToUInt16(file, ifd) * 12);
+            chain.Add((ifd, link));
+            ifd = BitConverter.ToInt32(file, link);
+        }
+
+        return chain;
+    }
 }

@@ -131,6 +131,12 @@
   "oracle": "model",
   "sha256": "b00a1408eb19000eced57bb6a74776b8146735d494bf1b899e9fbecc6ed74984"
  },
+ "float16_rgb_lzw_predictor2.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "b00a1408eb19000eced57bb6a74776b8146735d494bf1b899e9fbecc6ed74984"
+ },
  "float16_rgb_lzw_predictor3.tif": {
   "width": 37,
   "height": 23,
@@ -142,6 +148,12 @@
   "height": 23,
   "oracle": "model",
   "sha256": "84d135379dbf12dc60f5a9a9073d9e8f1040ad270cea1228ce4f140531b1ad78"
+ },
+ "float32_gray_deflate_predictor2_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
  },
  "float32_gray_predictor3_tiles.tif": {
   "width": 37,
@@ -179,6 +191,12 @@
   "oracle": "model",
   "sha256": "ea86e78d0a55525070286b838f831c72b3a1018a4c0f6851bead8382331866f4"
  },
+ "float64_gray_deflate_predictor2_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+ },
  "float64_gray_deflate_predictor3_tiles.tif": {
   "width": 37,
   "height": 23,
@@ -192,6 +210,12 @@
   "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
  },
  "float64_rgb_be.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "f17b788b7e53aafe6fd5940d53c2e7ed305a8ed600b401f5688bba263680ba74"
+ },
+ "float64_rgb_lzw_predictor2_tiles.tif": {
   "width": 37,
   "height": 23,
   "oracle": "model",
@@ -335,11 +359,23 @@
   "oracle": "model",
   "sha256": "da5010a40503cbba8480c5db66f0a3ed0f8836284010eefe783cbfcc19fa12af"
  },
+ "gray8_deflate_no_bytecounts.tif": {
+  "width": 23,
+  "height": 9,
+  "oracle": "libtiff",
+  "sha256": "20a1d46b9374e11d7d1a89771135cbd2e59998f9f3f54fafde3ac28cfe19eee7"
+ },
  "gray8_deflate_tiles.tif": {
   "width": 37,
   "height": 23,
   "oracle": "pillow",
   "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+ },
+ "gray8_deflate_zero_count.tif": {
+  "width": 23,
+  "height": 9,
+  "oracle": "libtiff",
+  "sha256": "20a1d46b9374e11d7d1a89771135cbd2e59998f9f3f54fafde3ac28cfe19eee7"
  },
  "gray8_lzw_old_style.tif": {
   "width": 100,
@@ -358,6 +394,18 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "ef94002a3cb9bed508b18f132fb20a5459298baf00a5599970b9d1d66f4cdc89"
+ },
+ "gray8_single_strip_short_count.tif": {
+  "width": 23,
+  "height": 9,
+  "oracle": "libtiff",
+  "sha256": "20a1d46b9374e11d7d1a89771135cbd2e59998f9f3f54fafde3ac28cfe19eee7"
+ },
+ "gray8_tiles_in_strip_tags.tif": {
+  "width": 23,
+  "height": 9,
+  "oracle": "libtiff",
+  "sha256": "20a1d46b9374e11d7d1a89771135cbd2e59998f9f3f54fafde3ac28cfe19eee7"
  },
  "graya12_straight_separate.tif": {
   "width": 37,
@@ -607,6 +655,12 @@
    }
   ]
  },
+ "palette1_g4.tif": {
+  "width": 80,
+  "height": 64,
+  "oracle": "pillow",
+  "sha256": "ff66be20f509187d60031dc6f208ca847845420a570dc61c46dad164365150c9"
+ },
  "palette1_none.tif": {
   "width": 37,
   "height": 23,
@@ -624,6 +678,18 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "00033cbc6a96aeb1e65cf38ff49c93e8f38294a46f9a7012b93921923380cc9b"
+ },
+ "palette8_alpha_lzw.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "1222bf30f8e27f8402b6da9b0333cf2fcd36dafcc3124eb1174b16eb713c73e8"
+ },
+ "palette8_alpha_separate.tif": {
+  "width": 37,
+  "height": 23,
+  "oracle": "model",
+  "sha256": "1222bf30f8e27f8402b6da9b0333cf2fcd36dafcc3124eb1174b16eb713c73e8"
  },
  "palette8_lzw.tif": {
   "width": 37,
@@ -703,6 +769,12 @@
   "oracle": "pillow",
   "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
  },
+ "rgb8_extra_bitspersample.tif": {
+  "width": 10,
+  "height": 8,
+  "oracle": "libtiff",
+  "sha256": "6f7d1bc73b93c3a174b246f72c30439a50a14a69e7ff94e298f29c129e44b425"
+ },
  "rgb8_lzw_predictor.tif": {
   "width": 160,
   "height": 120,
@@ -763,6 +835,12 @@
   "oracle": "pillow",
   "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
  },
+ "rgb8_signed_offsets.tif": {
+  "width": 10,
+  "height": 8,
+  "oracle": "libtiff",
+  "sha256": "6f7d1bc73b93c3a174b246f72c30439a50a14a69e7ff94e298f29c129e44b425"
+ },
  "rgb8_tiles_deflate.tif": {
   "width": 160,
   "height": 120,
@@ -786,6 +864,12 @@
   "height": 23,
   "oracle": "pillow",
   "sha256": "c24cea34c9ca3a1b5df526cada5bbc87739211e161d6a3886a5b6bbe9a4ee999"
+ },
+ "rgb8_wrong_bytecounts.tif": {
+  "width": 10,
+  "height": 8,
+  "oracle": "libtiff",
+  "sha256": "6f7d1bc73b93c3a174b246f72c30439a50a14a69e7ff94e298f29c129e44b425"
  },
  "rgba12_assoc.tif": {
   "width": 37,

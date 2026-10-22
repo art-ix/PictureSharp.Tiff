@@ -44,6 +44,18 @@ internal sealed class TiffMetadataCodec : IImageFormatMetadataCodec
         bool resolutionChanged = metadata.HorizontalResolution != original.HorizontalResolution
             || metadata.VerticalResolution != original.VerticalResolution;
 
+        // The new IFD goes after the end of the file: data that should lie there would become the new IFD's bytes,
+        // and entries already outside the file could not be copied.
+        if (image.OutsideFile > 0)
+        {
+            throw TiffDecoder.Error("The TIFF page has tags whose values lie outside the file, so its metadata cannot be rewritten.");
+        }
+
+        if (ChunksOutsideFile(bytes, image))
+        {
+            throw TiffDecoder.Error("The TIFF page has strips or tiles that extend past the end of the file, so its metadata cannot be rewritten.");
+        }
+
         var ifd = new TiffIfdWriter(header.BigEndian, header.BigTiff);
         foreach (TiffEntry e in image.Entries)
         {
@@ -93,22 +105,72 @@ internal sealed class TiffMetadataCodec : IImageFormatMetadataCodec
         byte[] result = new byte[length];
         bytes.CopyTo(result);
         ifd.ToArray((ulong)offset, image.Next).CopyTo(result.AsSpan((int)offset));
-        Span<byte> link = result.AsSpan((int)file.Link, header.OffsetSize);
+        WriteOffset(result, file.Link, (ulong)offset, header);
+
+        // A chain that loops back to the old IFD (libtiff's test_ifd_loop_* files) would reach it again after the new
+        // one and show the page twice; such a link follows the new IFD instead, so the chain keeps its pages.
+        var visited = new HashSet<ulong>();
+        for (ulong at = (ulong)offset; at != 0 && visited.Count < TiffFile.MaxDirectories && visited.Add(at);)
+        {
+            if (!TiffDirectory.TryScan(result, header, at, out _, out ulong next, out long nextLink))
+            {
+                break;
+            }
+
+            if (next == file.ImageOffset)
+            {
+                WriteOffset(result, nextLink, (ulong)offset, header);
+                break;
+            }
+
+            at = next;
+        }
+
+        return result;
+    }
+
+    private static bool ChunksOutsideFile(ReadOnlySpan<byte> data, TiffDirectory ifd)
+    {
+        bool tiled = ifd.TryGet(TiffTag.TileOffsets, out TiffEntry offsets);
+        if (!tiled && !ifd.TryGet(TiffTag.StripOffsets, out offsets))
+        {
+            return false;
+        }
+
+        if (!ifd.TryGet(tiled ? TiffTag.TileByteCounts : TiffTag.StripByteCounts, out TiffEntry counts)
+            || !TiffEntry.IsInteger(offsets.Type) || !TiffEntry.IsInteger(counts.Type))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < Math.Min(offsets.Count, counts.Count); i++)
+        {
+            ulong offset = ifd.GetULong(data, offsets, i), count = ifd.GetULong(data, counts, i);
+            if (count > 0 && (offset > (ulong)data.Length || count > (ulong)data.Length - offset))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void WriteOffset(byte[] file, long position, ulong value, TiffHeader header)
+    {
+        Span<byte> link = file.AsSpan((int)position, header.OffsetSize);
         if (header.BigTiff)
         {
-            BinaryPrimitives.WriteUInt64LittleEndian(link, (ulong)offset);
+            BinaryPrimitives.WriteUInt64LittleEndian(link, value);
         }
         else
         {
-            BinaryPrimitives.WriteUInt32LittleEndian(link, (uint)offset);
+            BinaryPrimitives.WriteUInt32LittleEndian(link, (uint)value);
         }
 
         if (header.BigEndian)
         {
             link.Reverse();
         }
-
-        return result;
     }
 
     private static bool Same(byte[]? a, byte[]? b) => (a is null) == (b is null) && (a is null || a.AsSpan().SequenceEqual(b));

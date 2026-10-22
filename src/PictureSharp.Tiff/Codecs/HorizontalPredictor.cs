@@ -9,8 +9,9 @@ internal static class HorizontalPredictor
     /// Undoes the differencing row by row. <paramref name="stride"/> is the number of samples per pixel in the row
     /// (1 for a separate plane).
     /// </summary>
-    // port: libtiff/tif_predict.c PredictorDecodeTile with horAcc8, horAcc16, horAcc32, swabHorAcc16 and swabHorAcc32.
-    // Samples are summed in the file's byte order instead of swapping the buffer first; the result is the same.
+    // port: libtiff/tif_predict.c PredictorDecodeTile with horAcc8, horAcc16, horAcc32, horAcc64 and their swab
+    // variants. Samples are summed in the file's byte order instead of swapping the buffer first; the result is the
+    // same. As in libtiff, floating-point samples are summed as integers of the same width.
     public static void Decode(Span<byte> chunk, int rowBytes, int stride, int bits, bool bigEndian)
     {
         for (int start = 0; start + rowBytes <= chunk.Length; start += rowBytes)
@@ -21,6 +22,23 @@ internal static class HorizontalPredictor
                 for (int i = stride; i < row.Length; i++)
                 {
                     row[i] += row[i - stride];
+                }
+            }
+            else if (bits == 64)
+            {
+                int words = row.Length / 8;
+                for (int i = stride; i < words; i++)
+                {
+                    Span<byte> current = row.Slice(i * 8, 8);
+                    ReadOnlySpan<byte> left = row.Slice((i - stride) * 8, 8);
+                    if (bigEndian)
+                    {
+                        BinaryPrimitives.WriteUInt64BigEndian(current, BinaryPrimitives.ReadUInt64BigEndian(current) + BinaryPrimitives.ReadUInt64BigEndian(left));
+                    }
+                    else
+                    {
+                        BinaryPrimitives.WriteUInt64LittleEndian(current, BinaryPrimitives.ReadUInt64LittleEndian(current) + BinaryPrimitives.ReadUInt64LittleEndian(left));
+                    }
                 }
             }
             else if (bits == 32)

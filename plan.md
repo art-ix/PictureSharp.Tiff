@@ -7,7 +7,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
-(see "Next: 0.6.1–1.0.0"): 0.6.1 done, not released; 0.7.0 next.**
+(see "Next: 0.6.1–1.0.0"): 0.6.1 done, not released; 0.7.0 in progress.**
 
 ## Versions
 
@@ -30,7 +30,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.5.5 | Reading: JPEG variants (planar, CMYK) | Released in 0.6.0 |
 | 0.6.0 | Release of the reading gaps | Released 2026-10-22 |
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Done, not released |
-| 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Planned (downloads need approval) |
+| 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | In progress (all five sources triaged; fixes done, not released) |
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI | Planned |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
@@ -688,6 +688,61 @@ and deviations no synthetic corpus has.
   Unsupported features that turn up often become candidates for 0.8.0 (old-style JPEG is the likely one).
 - **Metadata:** `ReadMetadata` and `EditMetadata` on the same files; libtiff must still decode every edited IFD.
 - DoD: every external file classified; no unexpected exception types; fixes released with regression files.
+
+Progress 2026-10-22:
+- Tooling: `tests/assets/fetch-external.sh` (sources `libtiff-images`, `libtiff-pics`, `gdal`, `pillow`, `exiftool`;
+  `SOURCES.tsv` with origin and SHA-256), `external_oracle.py` (libtiff rasters in the stored orientation; floating
+  point through the model from `TIFFReadScanline`/`TIFFReadTile` samples; `--edited` re-reads the edited files),
+  `ExternalTests` (`Category=Local`: decode, `Identify`, `ReadMetadata`, `EditMetadata`; per-file lines in
+  `external/results/`) and `external_triage.py`.
+- First source, libtiff 4.5.1's `test/images` (27 files, already local, no download): 24 pages exact, 4 within 1
+  (16-bit grey and 2-sample alpha: rounding; 4- and 8-bit palettes: deliberate, see below), 4 unsupported (old-style
+  JPEG ×3, LogLuv), 2 fixed:
+  - Bug: predictor 2 with floating-point (and 64-bit) samples was rejected; libtiff differences them as integers of
+    the same width (`horAcc16`–`horAcc64`) whatever the format. Fixed; regression files
+    `float16_rgb_lzw_predictor2`, `float32_gray_deflate_predictor2_be`, `float64_rgb_lzw_predictor2_tiles`,
+    `float64_gray_deflate_predictor2_be` (libtiff's samples through the rule match the references). Pillow 10.2.0
+    misreads big-endian float32 with predictor 2 (it swaps libtiff's native samples again), so that file is checked
+    against libtiff.
+  - Bug: `EditMetadata` on a chain that loops back to the edited IFD (`test_ifd_loop_to_self`, `_to_first`) left the
+    old IFD reachable, so libtiff saw one page more. The loop link is now patched to the new IFD too; regression test
+    `EditMetadata_OnAnIfdLoop_KeepsThePages`.
+  - Deliberate: 16-bit colour maps are rounded (`round(v / 257)`); libtiff and Pillow take the high byte. Documented
+    in `docs/decoding.md`. Not copied: libtiff's guess that a colour map with all entries below 256 is 8-bit (it warns
+    "Assuming 8-bit colormap"); revisit if a real file needs it.
+  - Docs: `docs/decoding.md` said IFD loops throw; they end the chain, as in libtiff.
+- All sources downloaded with the user's approval on 2026-10-22 (`libtiff-pics` 72 files, `gdal` 230, `pillow` 100,
+  `exiftool` 2; `SOURCES.tsv`): 420 TIFF files, 466 IFDs. libtiff converts 350, the model covers 56 more (integer
+  depths and floating point libtiff's RGBA path rejects, 16-bit CMYK; the model reads `TIFFReadScanline`/`Tile`
+  samples). Result: 325 pages exact, 35 within 1 (rounding classes: 16 bits, colour maps, CMYK, alpha), 30 errors
+  (`ImageFormatException`) all on files libtiff also rejects or decodes only with errors (truncated PackBits, short
+  byte count arrays, corrupt Deflate, Pillow's `crash-*` fuzz files), 59 unsupported, 1 decoded where libtiff gives
+  up (`excessive-memory-TIFFFillTile`, which libtiff only reports). No other exception type. 396 files edited with
+  `EditMetadata`; libtiff reads every one as before.
+  - The comparison follows `TIFFRGBAImage`'s alpha rules (greyscale alpha stored, palette alpha ignored,
+    ExtraSamples 0 or a fourth RGB sample without the tag taken as associated, 2 premultiplied) and flips the sign
+    bit of signed samples (libtiff reinterprets them; documented). Associated alpha below its colour (GDAL's
+    `rgba.tif`) is compared clamped, as the plugin unpremultiplies it.
+  - Fixed: strip and tile arrays as libtiff reads them (`TiffChunks`, port of `TIFFFetchStripThing`,
+    `ByteCountLooksBad`, `EstimateStripByteCounts`): `StripOffsets`/`TileOffsets` interchangeable (libtiff
+    `pics-3.8.0` `cramps-tile`, `quad-tile`), signed types (GDAL's SLONG8 offsets), missing byte counts for one
+    compressed strip per plane, bogus single-strip and wrong uncompressed counts estimated. Regression files
+    `gray8_single_strip_short_count`, `gray8_deflate_zero_count`, `gray8_deflate_no_bytecounts`,
+    `rgb8_wrong_bytecounts`, `gray8_tiles_in_strip_tags`, `rgb8_signed_offsets` (libtiff oracle).
+  - Fixed: `BitsPerSample` with more values than samples (Pillow's `tiff_wrong_bits_per_sample_2`): only the first
+    `SamplesPerPixel` must agree, as in `TIFFReadDirEntryPersampleShort`; `rgb8_extra_bitspersample`.
+  - New: 8-bit palette with straight alpha (Pillow's "PA", `rdf.tif`), `palette8_alpha_lzw`,
+    `palette8_alpha_separate`; Group 4 with a 1-bit palette (GDAL's `slim_g4`), `palette1_g4`.
+  - Fixed: `EditMetadata` refused nothing on truncated files; the appended IFD then took the place of the missing
+    strip data and a file that failed decoded garbage (GDAL's `byte_truncated`, `corrupted_gtiff_tags`). A page
+    with strips or tiles past the end of the file, or with tags outside it, now throws `ImageFormatException`.
+  - Deliberate, unchanged: without `Photometric` the plugin assumes MinIsBlack for one sample; libtiff's
+    conversion gives the same (Pillow assumes MinIsWhite). A lone extra sample without `ExtraSamples` is straight
+    alpha (Pillow); libtiff takes a fourth RGB sample as associated.
+  - Candidates for 0.8.0 (libtiff converts, the plugin reports `NotSupportedException`): old-style JPEG (9 pages),
+    LogLuv (5), Zstandard (3), NeXT 2-bit (3), ThunderScan (2), LZMA (1), LERC (1), JPEG RGB with contiguous
+    alpha (1). Not copied: libtiff decodes partial images of corrupt files (stop-on-error off) where the plugin
+    throws; libtiff's guess that a colour map below 256 is 8-bit.
 
 ### 0.7.1 — platforms
 

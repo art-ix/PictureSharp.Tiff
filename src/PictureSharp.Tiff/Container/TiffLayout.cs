@@ -132,8 +132,8 @@ internal sealed class TiffLayout
             throw TiffDecoder.Error($"The TIFF SamplesPerPixel value {samples} is invalid.");
         }
 
-        int bits = SameForEverySample(data, ifd, TiffTag.BitsPerSample, 1, "BitsPerSample");
-        int format = SameForEverySample(data, ifd, TiffTag.SampleFormat, FormatUnsigned, "SampleFormat");
+        int bits = SameForEverySample(data, ifd, TiffTag.BitsPerSample, 1, "BitsPerSample", (int)samples);
+        int format = SameForEverySample(data, ifd, TiffTag.SampleFormat, FormatUnsigned, "SampleFormat", (int)samples);
         if (bits is 0 or > 64)
         {
             throw TiffDecoder.Error($"The TIFF BitsPerSample value {bits} is invalid.");
@@ -209,7 +209,9 @@ internal sealed class TiffLayout
             throw TiffDecoder.Error($"The TIFF image has {SamplesPerPixel} samples per pixel, fewer than its colour model needs.");
         }
 
-        if (SamplesPerPixel > MaxSamplesPerPixel || (Photometric == Palette && SamplesPerPixel != 1))
+        // port: Pillow 10.2.0 TiffImagePlugin OPEN_INFO "PA": an 8-bit palette index with straight alpha.
+        bool paletteAlpha = Photometric == Palette && SamplesPerPixel == 2 && BitsPerSample == 8 && AlphaSample == 1 && !Associated;
+        if (SamplesPerPixel > MaxSamplesPerPixel || (Photometric == Palette && SamplesPerPixel != 1 && !paletteAlpha))
         {
             throw new NotSupportedException($"TIFF images with {SamplesPerPixel} samples per pixel are not supported for the photometric interpretation {Photometric}.");
         }
@@ -217,8 +219,9 @@ internal sealed class TiffLayout
         bool predictorFits = EffectivePredictor switch
         {
             1 => true,
-            // port: libtiff/tif_predict.c PredictorSetupDecode: horAcc8, horAcc16 and horAcc32 for integer samples.
-            2 => SampleFormat is FormatUnsigned or FormatSigned && BitsPerSample is 8 or 16 or 32 && !IsSubsampledYCbCr,
+            // port: libtiff/tif_predict.c PredictorSetupDecode: horAcc8 to horAcc64 by sample width, whatever the
+            // sample format (floating point included).
+            2 => BitsPerSample is 8 or 16 or 32 or 64 && !IsSubsampledYCbCr,
             3 => SampleFormat == FormatFloat,
             _ => false,
         };
@@ -262,9 +265,10 @@ internal sealed class TiffLayout
             throw new NotSupportedException($"The TIFF compression {name} is not supported.");
         }
 
-        if (IsCcitt && (BitsPerSample != 1 || SamplesPerPixel != 1 || Photometric is not (WhiteIsZero or BlackIsZero)))
+        // libtiff's fax codec only needs one bit per sample; a 1-bit palette (GDAL's slim_g4) indexes its colour map.
+        if (IsCcitt && (BitsPerSample != 1 || SamplesPerPixel != 1 || Photometric is not (WhiteIsZero or BlackIsZero or Palette)))
         {
-            throw new NotSupportedException("CCITT compression is only supported for 1-bit bilevel TIFF images.");
+            throw new NotSupportedException("CCITT compression is only supported for 1-bit bilevel or palette TIFF images.");
         }
 
         // Planar JPEG holds one-component planes, so extra samples (alpha) are possible there, as in libtiff.
@@ -363,7 +367,7 @@ internal sealed class TiffLayout
 
     // port: Pillow 10.2.0 TiffImagePlugin OPEN_INFO: ExtraSamples 1 is premultiplied alpha, 2 and unknown values such
     // as Corel's 999 straight alpha, 0 an ignored sample; without the tag the sample after the colour samples is
-    // straight alpha when it is the only extra one.
+    // straight alpha when it is the only extra one (not for CMYK or palette, where Pillow requires the tag).
     private static (int Sample, bool Associated) Alpha(ReadOnlySpan<byte> data, TiffDirectory ifd, int photometric, int samples)
     {
         int color = photometric switch
@@ -372,14 +376,14 @@ internal sealed class TiffLayout
             Separated => 4,
             _ => 1,
         };
-        if (photometric is not (WhiteIsZero or BlackIsZero or Rgb or Separated) || samples <= color)
+        if (photometric is not (WhiteIsZero or BlackIsZero or Rgb or Separated or Palette) || samples <= color)
         {
             return (-1, false);
         }
 
         if (!ifd.TryGet(TiffTag.ExtraSamples, out TiffEntry extra) || extra.Count == 0 || !TiffEntry.IsInteger(extra.Type))
         {
-            return samples == color + 1 && photometric != Separated ? (color, false) : (-1, false);
+            return samples == color + 1 && photometric is not (Separated or Palette) ? (color, false) : (-1, false);
         }
 
         return ifd.GetUInt(data, extra, 0) switch
@@ -390,7 +394,9 @@ internal sealed class TiffLayout
         };
     }
 
-    private static int SameForEverySample(ReadOnlySpan<byte> data, TiffDirectory ifd, ushort tag, int fallback, string name)
+    // port: libtiff/tif_dirread.c TIFFReadDirEntryPersampleShort: only the first SamplesPerPixel values must agree;
+    // writers that list more values than samples (Pillow's tiff_wrong_bits_per_sample_2) are read.
+    private static int SameForEverySample(ReadOnlySpan<byte> data, TiffDirectory ifd, ushort tag, int fallback, string name, int samples)
     {
         if (!ifd.TryGet(tag, out TiffEntry entry) || entry.Count == 0)
         {
@@ -403,7 +409,7 @@ internal sealed class TiffLayout
         }
 
         uint first = ifd.GetUInt(data, entry, 0);
-        int count = (int)Math.Min(entry.Count, MaxSamplesPerPixel);
+        int count = (int)Math.Min(Math.Min(entry.Count, (uint)samples), MaxSamplesPerPixel);
         for (int i = 1; i < count; i++)
         {
             if (ifd.GetUInt(data, entry, i) != first)

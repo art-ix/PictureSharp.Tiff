@@ -64,6 +64,22 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
   where the corpus is rewritten by `Image.EditMetadata` next to the originals (libtiff must decode every IFD as before).
   Files with EXIF come with a JPEG carrying the same block (`name.exif.jpg`), which Pillow reads for comparison.
 
+- Real-world files (0.7.0) live in `tests/assets/external/<source>/`, never committed. `fetch-external.sh <source>`
+  fetches them (every source but `libtiff-images` downloads: only with the user's approval) and records origin and
+  SHA-256 in `external/SOURCES.tsv`; `external_oracle.py` writes libtiff's rasters and `external/external.json`;
+  `ExternalTests` (`Category=Local`) compares, writes `external/results/` and `external/edited/`; then
+  `external_triage.py` lists every page that is not exact and `external_oracle.py --edited` checks the edited files:
+
+  ```bash
+  tests/assets/fetch-external.sh libtiff-images
+  python3 -I tests/assets/external_oracle.py
+  dotnet test -c Release -- --treenode-filter "/*/*/ExternalTests/*"
+  python3 -I tests/assets/external_triage.py
+  python3 -I tests/assets/external_oracle.py --edited
+  ```
+
+  A difference found there that is a bug gets a minimal synthetic reproduction in the committed corpus.
+
 - `reference/tiff-4.5.1/` holds the libtiff sources the codecs are ported from (downloaded with the user's approval
   on 2026-10-21 from download.osgeo.org, SHA-256 `d7f38b67…a5e2b`).
 

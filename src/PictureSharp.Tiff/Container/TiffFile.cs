@@ -9,9 +9,10 @@ internal sealed class TiffFile
 {
     public const int MaxDirectories = 65536;
 
-    private TiffFile(TiffDirectory image, int pages, long link)
+    private TiffFile(TiffDirectory image, ulong offset, int pages, long link)
     {
         Image = image;
+        ImageOffset = offset;
         Pages = pages;
         Link = link;
     }
@@ -20,6 +21,9 @@ internal sealed class TiffFile
     /// The selected full-resolution IFD; for page 0, the first IFD when every one is reduced-resolution.
     /// </summary>
     public TiffDirectory Image { get; }
+
+    /// <summary>The offset of <see cref="Image"/> in the file.</summary>
+    public ulong ImageOffset { get; }
 
     /// <summary>The number of full-resolution IFDs in the chain (at least 1); only counted when requested.</summary>
     public int Pages { get; }
@@ -82,6 +86,7 @@ internal sealed class TiffFile
             throw TiffDecoder.Error($"The TIFF file has {Math.Max(1, pages)} page(s); page {page} does not exist.");
         }
 
-        return new TiffFile(TiffDirectory.Parse(data, header, found ? selected : header.FirstIfd), Math.Max(1, pages), selectedLink);
+        ulong image = found ? selected : header.FirstIfd;
+        return new TiffFile(TiffDirectory.Parse(data, header, image), image, Math.Max(1, pages), selectedLink);
     }
 }
