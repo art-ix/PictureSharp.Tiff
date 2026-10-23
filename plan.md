@@ -806,7 +806,8 @@ Done 2026-10-23 (not released yet). Decisions and deviations:
   runs, restarted after fixes), 120 million executions: load 34 M (3397 edges, 2637 queue entries), identify 30 M
   (3150, 2364), metadata 29 M (3330, 2366), edit 16.5 M (3867, 2767), encode 9.7 M (4631, 2458); seeds were the 538
   committed and external TIFF files up to 64 KiB. Coverage is of `PictureSharp.Tiff.dll` only. The final queues
-  replay clean, also through `parallel`. Several CPU-hours per target remain to be run before 1.0.
+  replay clean, also through `parallel`. The user accepted this duration as sufficient (2026-10-23), in place of
+  the several CPU-hours per target planned.
 - Findings, all fixed, each with a file in `tests/assets/fuzz/` (9) and a test in `FuzzRegressionTests` that fails
   on 0.7.1:
   - Process crash: a WebP strip or tile at offset 0 is the TIFF file itself, which `DecodeEmbeddedPart` decoded as
