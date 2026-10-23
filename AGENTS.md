@@ -40,6 +40,7 @@ to the main type, name partial files `Type.Responsibility.cs`, and keep hot loop
 | `tests/PictureSharp.Tiff.Tests/` | TUnit tests |
 | `tests/assets/` | Corpus, reference data, public API snapshot and generation scripts |
 | `reference/` | Uncommitted reference sources and tools (libtiff) |
+| `tools/` | Fuzzing harness (AFL++ and SharpFuzz, 0.7.2; see `tools/README.md`); packages allowed, not shipped |
 
 ## Reference data
 

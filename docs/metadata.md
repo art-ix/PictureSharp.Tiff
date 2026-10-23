@@ -56,6 +56,12 @@ File.WriteAllBytes("scan.tif", edited);
 - `TiffDecoderOptions.Page` in the decoder options selects the page to edit.
 - A page whose strips or tiles extend past the end of the file, or with tags whose values lie outside it, throws
   `ImageFormatException`: the appended directory would take the place of the missing data.
+- Anything else the file reaches past its end would land in the appended bytes, so it is made explicit or cut off
+  (0.7.2): byte counts the decoder estimates (missing, or implausible as libtiff judges them) are stored in the new
+  directory; EXIF, GPS and Interoperability directories that are not entirely in the file are rewritten from the
+  block read, so nothing new appears; and an IFD link that leads outside the file, which ended the chain, is set to 0.
+  A page whose strips or tiles overlap a link the edit has to change (a strip at offset 0 holds the header) throws
+  `ImageFormatException`, since its pixels would change.
 - Gamma, chromaticities and sRGB rendering intent have no TIFF tags here and throw `NotSupportedException`.
 
 Validation: EXIF written by the encoder is read back the same by Pillow (`getexif`) and libtiff

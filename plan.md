@@ -8,7 +8,7 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
 (see "Next: 0.6.1–1.0.0"): 0.7.0 released 2026-10-22 (real-world files, with the 0.6.1 housekeeping); 0.7.1
-(platforms, NeXT and ThunderScan) released 2026-10-22; 0.7.2 (fuzzing) next.**
+(platforms, NeXT and ThunderScan) released 2026-10-22; 0.7.2 (fuzzing) done 2026-10-23, not released.**
 
 ## Versions
 
@@ -33,7 +33,7 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Released in 0.7.0 |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Released 2026-10-22 |
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Released 2026-10-22 |
-| 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Planned |
+| 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Done, not released |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
 | 1.0.0 | Stable release on a stable core SPI | Planned |
@@ -793,6 +793,34 @@ Released 2026-10-22. Decisions and deviations:
   input), memory within `MaxPixels`/`MaxMetadataBytes` and the documented buffers.
 - Every finding gets a minimized file in the committed corpus and a regression test.
 - DoD: the campaign's duration, coverage and findings recorded here; all findings fixed.
+
+Done 2026-10-23 (not released yet). Decisions and deviations:
+- Tooling: AFL++ 4.09c (system package, installed by the user) with SharpFuzz 2.3.0 and the SharpFuzz.CommandLine
+  instrumenter as a local tool (user decision, 2026-10-23); `tools/PictureSharp.Tiff.Fuzz` with the targets `load`,
+  `identify`, `metadata`, `edit` and `encode` (plus `parallel`, replay only: 1, 2, 4 and 16 threads give the same
+  pixels or exception), `tools/fuzz.sh`, a TIFF dictionary, `tools/README.md`. Limits `MaxPixels` 2^18,
+  `MaxMetadataBytes` 1 MiB, one thread, 2 s per input, an allocation budget per call derived from `docs/decoding.md`.
+  libFuzzer was not used (no clang on the machine). afl-cmin and afl-tmin cannot run SharpFuzz targets with this
+  AFL++ (see the README); the harness has its own `minimize`.
+- Campaign: shortened at the user's request to about 1.9 CPU-hours per target (3 instances, about 40 minutes in three
+  runs, restarted after fixes), 120 million executions: load 34 M (3397 edges, 2637 queue entries), identify 30 M
+  (3150, 2364), metadata 29 M (3330, 2366), edit 16.5 M (3867, 2767), encode 9.7 M (4631, 2458); seeds were the 538
+  committed and external TIFF files up to 64 KiB. Coverage is of `PictureSharp.Tiff.dll` only. The final queues
+  replay clean, also through `parallel`. Several CPU-hours per target remain to be run before 1.0.
+- Findings, all fixed, each with a file in `tests/assets/fuzz/` (9) and a test in `FuzzRegressionTests` that fails
+  on 0.7.1:
+  - Process crash: a WebP strip or tile at offset 0 is the TIFF file itself, which `DecodeEmbeddedPart` decoded as
+    TIFF again, recursing until the stack overflowed. WebP streams must start with RIFF/WEBP (JPEG already needed
+    SOI). Requested in the core `plan.md`: a nesting limit for embedded decodes.
+  - `EditMetadata` appends the new IFD, and what the file referred to past its end came to lie there: a next link
+    outside the file added pages (the fuzzer's case: a rational's denominator read as an empty IFD), estimated byte
+    counts changed with the file length (now stored), EXIF or GPS IFDs outside the file appeared (now rewritten from
+    the block), strips at offset 0 or IFDs overlapping the header were corrupted by the patched links (now refused:
+    the strips' bytes and the chain are checked after patching). `verify_written.py` accepts that libtiff now reads
+    the edited `rgb8_no_bytecounts` (several strips without byte counts, which libtiff cannot estimate).
+- Not bugs, documented in `docs/decoding.md`: a JPEG or WebP tile is checked against `MaxPixels` on its own (the
+  core's rule), so a tile larger than the image needs a `MaxPixels` of its size; raw-sample buffers reach 128 bytes
+  per pixel of a strip or tile (16 samples of 64 bits). A tiled WebP encode slower than 2 s only under full load.
 
 ### 0.8.0 — scope of 1.0
 

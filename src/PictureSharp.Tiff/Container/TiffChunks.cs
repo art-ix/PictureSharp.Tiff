@@ -82,6 +82,30 @@ internal sealed class TiffChunks
         return new TiffChunks(ifd, offsets, counts, estimate);
     }
 
+    /// <summary>Whether the byte counts are estimated instead of stored, so they depend on the size of the file.</summary>
+    public bool Estimated => estimate != Estimate.None;
+
+    /// <summary>
+    /// The offset and byte count of every chunk (planes one after the other) as the decoder reads them, before the
+    /// count is cut to the file.
+    /// </summary>
+    public static (ulong Offset, ulong Count)[] Ranges(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout, out bool estimated)
+    {
+        TiffChunks table = Read(data, ifd, layout);
+        estimated = table.Estimated;
+        long perPlane = layout.ChunksPerPlane;
+        var ranges = new (ulong, ulong)[perPlane * layout.Planes];
+        for (long i = 0; i < ranges.Length; i++)
+        {
+            // The full size TiffPixelDecoder passes: a strip has its own rows (the last one fewer), a tile all of them.
+            long c = i % perPlane;
+            int rows = layout.Tiled ? layout.ChunkHeight : (int)Math.Min(layout.ChunkHeight, layout.Height - (c * layout.ChunkHeight));
+            ranges[i] = (table.Offset(data, i), table.Count(data, i, (int)layout.ChunkBytes(rows)));
+        }
+
+        return ranges;
+    }
+
     /// <summary>The offset of chunk <paramref name="index"/> (planes one after the other).</summary>
     public ulong Offset(ReadOnlySpan<byte> data, long index) => Value(data, offsets, (int)index);
 

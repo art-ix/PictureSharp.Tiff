@@ -78,7 +78,10 @@ error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed
 ### JPEG and WebP strips
 
 Each JPEG or WebP strip or tile is a complete stream that the configuration's own JPEG or WebP codec decodes (through
-`ImageDecodeContext.DecodeEmbeddedPart`), within the strip's or tile's size. `JPEGTables` shared by the strips are
+`ImageDecodeContext.DecodeEmbeddedPart`), within the strip's or tile's size. A stream must start with the JPEG SOI
+marker or the RIFF/WEBP header, otherwise it is an error (`ImageFormatException`): the core picks the codec by
+signature, and a strip that holds a TIFF file (offset 0 points at the file itself) would otherwise decode the file again,
+without end. `JPEGTables` shared by the strips are
 merged into each stream as libtiff does. JPEG output therefore matches the PictureSharp JPEG decoder exactly and libjpeg
 within the usual IDCT tolerance; WebP output matches libwebp exactly, lossy included. CMYK JPEG strips (photometric 5)
 hold ink amounts, as libtiff writes them, and are decoded with `JpegCmykStorage.Plain` (PictureSharp 0.7.10), not with
@@ -90,7 +93,12 @@ plane may also hold alpha; a plane with more than one component is an error (`Im
 ## Options and limits
 
 - `MaxPixels`, `MaxInputBytes` and `MaxMetadataBytes` are checked before allocating; `MaxPixels` covers the image once,
-  also for JPEG and WebP strips.
+  also for JPEG and WebP strips. Each JPEG or WebP strip or tile is also checked against `MaxPixels` on its own (the
+  core's `DecodeEmbeddedPart`), so a tile larger than the whole image, such as a 256 x 256 tile of a 100 x 100 image,
+  needs `MaxPixels` of at least its own size.
+- Besides the image (4 bytes per pixel), a decode holds the raw samples of one strip or tile per thread: up to 16
+  samples of 64 bits, so at most 128 bytes per pixel of the strip or tile, and a tile may overhang the image by at
+  most 16 MiB of samples (threads: see below). Uncompressed contiguous data is read in place, without a buffer.
 - Cancellation is checked between strips and tiles.
 - `TargetSize`, `ApplyExifOrientation`, `ColorConversion` and `IgnoreMetadata` behave as for built-in formats. The
   orientation comes from the Orientation tag (274).

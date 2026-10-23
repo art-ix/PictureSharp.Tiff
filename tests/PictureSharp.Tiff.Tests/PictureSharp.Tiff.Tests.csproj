@@ -17,6 +17,7 @@
     <None Include="../assets/webp.json" Link="webp.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/written/**" Link="written/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../assets/corpus/**" Link="corpus/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../assets/fuzz/**" Link="fuzz/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

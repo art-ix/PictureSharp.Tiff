@@ -383,7 +383,10 @@ def verify_edited(path, entry):
     original = os.path.join(os.path.dirname(path), entry["original"])
     theirs, before = libtiff_pages(original)
     ours, after = libtiff_pages(path)
-    if ours != theirs:
+    # libtiff cannot open a file whose missing byte counts it does not estimate (several strips without
+    # StripByteCounts, rgb8_no_bytecounts); the edit stores the plugin's estimates (0.7.2), and libtiff then reads it.
+    readable_now = not theirs and ours and None not in ours
+    if ours != theirs and not readable_now:
         errors.append(f"libtiff pages differ from the original: {len(ours)} vs {len(theirs)} IFDs")
     new = [m for m in after if m not in before]
     if new:

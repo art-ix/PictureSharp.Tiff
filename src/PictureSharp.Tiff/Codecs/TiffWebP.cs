@@ -16,6 +16,14 @@ internal static class TiffWebP
     // one fewer), a tile its full size; the stream decodes into RGB for three samples (alpha dropped) or RGBA for four.
     public static void Decode(ReadOnlyMemory<byte> raw, ImageDecodeContext context, TiffLayout layout, int rows, Span<byte> chunk)
     {
+        // The core picks the decoder by signature, and a strip that holds a TIFF file (offset 0 points at the file
+        // itself) would decode this file again, recursing until the stack overflows.
+        ReadOnlySpan<byte> stream = raw.Span;
+        if (stream.Length < 12 || !stream[..4].SequenceEqual("RIFF"u8) || !stream[8..12].SequenceEqual("WEBP"u8))
+        {
+            throw TiffDecoder.Error("A TIFF WebP strip or tile is not a WebP stream.");
+        }
+
         int segmentHeight = layout.Tiled ? layout.ChunkHeight : rows;
         using Image image = context.DecodeEmbeddedPart(raw, layout.ChunkWidth, segmentHeight);
         if (image.Width < layout.ChunkWidth || image.Height < segmentHeight)

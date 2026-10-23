@@ -26,3 +26,6 @@ __pycache__/
 
 # Local sample images (not committed)
 samples/
+
+# Fuzzing work directory: harness build, seeds, afl-fuzz output (tools/fuzz.sh)
+tools/fuzz-work/

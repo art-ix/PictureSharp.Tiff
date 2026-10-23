@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Coverage-guided fuzzing (0.7.2): AFL++ through SharpFuzz; see tools/README.md. Not part of PictureSharp.Tiff.slnx. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- AFL++ needs every run of an input to take the same path; tiering and PGO only add noise. -->
+    <TieredCompilation>false</TieredCompilation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpFuzz" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PictureSharp.Tiff\PictureSharp.Tiff.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -78,6 +78,8 @@ internal sealed class TiffJpeg
     private Image DecodeStream(ReadOnlyMemory<byte> raw, ImageDecodeContext context, int width, int rows, bool planar)
     {
         ReadOnlySpan<byte> strip = raw.Span;
+        // The stream must start with SOI (the constructor checks the tables), so that the core decodes it as JPEG: a
+        // strip that holds this TIFF file would otherwise decode it again, recursing until the stack overflows.
         if (strip.Length < 4 || strip[0] != 0xFF || strip[1] != 0xD8)
         {
             throw TiffDecoder.Error("A TIFF JPEG strip or tile does not start with a JPEG SOI marker.");
