@@ -8,7 +8,8 @@ the BCL; no core code is copied. `System.IO.Compression` is allowed for decompre
 **Status: 0.6.0 released 2026-10-22 (reading gaps: 0.5.3 sample formats, 0.5.4 CIE L*a*b*, 0.5.5 CMYK and planar
 JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release plan". Stabilization towards 1.0
 (see "Next: 0.6.1–1.0.0"): 0.7.0 released 2026-10-22 (real-world files, with the 0.6.1 housekeeping); 0.7.1
-(platforms, NeXT and ThunderScan) released 2026-10-22; 0.7.2 (fuzzing) done 2026-10-23, not released.**
+(platforms, NeXT and ThunderScan) released 2026-10-22; 0.7.2 (fuzzing) released 2026-10-23; 0.7.3 (PictureSharp 0.8.5)
+released 2026-10-26; 0.8.0 (scope of 1.0) next.**
 
 ## Versions
 
@@ -33,7 +34,8 @@ JPEG; requires PictureSharp 0.7.10, released 2026-10-22); see "0.6.0 — release
 | 0.6.1 | Housekeeping: stale docs, libtiff float reading for YCbCr, README maturity note | Released in 0.7.0 |
 | 0.7.0 | Real-world files: external corpora checked against libtiff, fixes | Released 2026-10-22 |
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Released 2026-10-22 |
-| 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Done, not released |
+| 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Released 2026-10-23 |
+| 0.7.3 | PictureSharp 0.8.5: `ImageInfo.Color`, `Compression`, `Resolution` from `Identify` | Released 2026-10-26 |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
 | 1.0.0 | Stable release on a stable core SPI | Planned |
@@ -794,7 +796,7 @@ Released 2026-10-22. Decisions and deviations:
 - Every finding gets a minimized file in the committed corpus and a regression test.
 - DoD: the campaign's duration, coverage and findings recorded here; all findings fixed.
 
-Done 2026-10-23 (not released yet). Decisions and deviations:
+Released 2026-10-23. Decisions and deviations:
 - Tooling: AFL++ 4.09c (system package, installed by the user) with SharpFuzz 2.3.0 and the SharpFuzz.CommandLine
   instrumenter as a local tool (user decision, 2026-10-23); `tools/PictureSharp.Tiff.Fuzz` with the targets `load`,
   `identify`, `metadata`, `edit` and `encode` (plus `parallel`, replay only: 1, 2, 4 and 16 threads give the same
@@ -822,6 +824,17 @@ Done 2026-10-23 (not released yet). Decisions and deviations:
 - Not bugs, documented in `docs/decoding.md`: a JPEG or WebP tile is checked against `MaxPixels` on its own (the
   core's rule), so a tile larger than the image needs a `MaxPixels` of its size; raw-sample buffers reach 128 bytes
   per pixel of a strip or tile (16 samples of 64 bits). A tiled WebP encode slower than 2 s only under full load.
+
+### 0.7.3 — PictureSharp 0.8.5
+
+Core 0.8.5 replaced `ImageInfo.HasAlpha`, `BitsPerChannel` and the 96 DPI resolution pair with the required
+`Color` and `Compression` and a nullable `Resolution`, and rejects plugins built against older cores. Released
+2026-10-26 together with the core; minimum PictureSharp 0.8.5.
+- `Identify` reports the directory as declared, without `EnsureDecodable`: Photometric → model (YCbCr → `Rgb`,
+  separated with InkSet 1 and four colour samples → `Cmyk`, 8–10 → `Lab`, the rest `Other`), SamplesPerPixel,
+  BitsPerSample, SampleFormat (4 as unsigned like libtiff, 5–6 `Other`), alpha from the existing ExtraSamples rule
+  (Pillow's), tag 34675 → ICC, compression (JPEG `Lossy`, WebP and unknown `Unknown`).
+- `TiffIdentifyColorTests` (21 tests on the committed corpus); 3899 tests on linux-x64.
 
 ### 0.8.0 — scope of 1.0
 

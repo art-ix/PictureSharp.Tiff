@@ -4,11 +4,17 @@ Examples assume `TiffFormat` is registered in `ImageConfiguration.Default` (see 
 
 ```csharp
 using Image image = Image.Load("scan.tif");                                // first page, straight-alpha Rgba32
-ImageInfo info = Image.Identify("scan.tif");                               // size, bit depth and page count
+ImageInfo info = Image.Identify("scan.tif");                               // size, colour layout and page count
 ImageMetadata metadata = Image.ReadMetadata("scan.tif");                   // ICC, EXIF, XMP, resolution
 ```
 
-`Identify` and `ReadMetadata` read only the directories, never the pixel data.
+`Identify` and `ReadMetadata` read only the directories, never the pixel data. `info.Color` reports what the
+directory declares, also for pages `Load` rejects (signed or float samples, LogLuv): the model from Photometric
+(`Gray`, `Rgb` also for YCbCr, `Palette`, `Cmyk` for InkSet 1, `Lab`, otherwise `Other`), SamplesPerPixel,
+BitsPerSample, SampleFormat (unsigned, signed, float; complex as `Other`), straight or premultiplied alpha from
+ExtraSamples and whether tag 34675 holds an ICC profile. `info.Compression` is `Lossy` for JPEG, `Unknown` for WebP
+and unknown schemes, otherwise `Lossless`; `info.Resolution` is null without XResolution/YResolution in inches or
+centimetres.
 
 ## Pages
 

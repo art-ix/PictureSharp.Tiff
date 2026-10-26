@@ -23,7 +23,7 @@ public sealed class TiffDecoderTests
         ImageInfo info = TestSupport.Identify(data);
         using Image image = TestSupport.Load(data);
         await Assert.That(info.Orientation).IsEqualTo(ExifOrientation.RightTop);
-        await Assert.That((info.HorizontalResolution, info.VerticalResolution)).IsEqualTo((300f, 150f));
+        await Assert.That(info.Resolution).IsEqualTo(new ImageResolution(300f, 150f));
         await Assert.That(image.Metadata.Orientation).IsEqualTo(ExifOrientation.RightTop);
         await Assert.That((image.Metadata.HorizontalResolution, image.Metadata.VerticalResolution)).IsEqualTo((300f, 150f));
         await Assert.That(image.Metadata.IccProfile).IsEquivalentTo(Encoding.ASCII.GetBytes(string.Concat(Enumerable.Repeat("ICC-PROFILE-BYTES", 3))));
@@ -94,8 +94,8 @@ public sealed class TiffDecoderTests
     public async Task Identify_ReportsAlphaAndDepth(string name, bool alpha, int bits)
     {
         ImageInfo info = TestSupport.Identify(TestSupport.ReadCorpus(name));
-        await Assert.That(info.HasAlpha).IsEqualTo(alpha);
-        await Assert.That(info.BitsPerChannel).IsEqualTo(bits);
+        await Assert.That(info.Color.HasAlpha).IsEqualTo(alpha);
+        await Assert.That(info.Color.BitsPerSample).IsEqualTo(bits);
         await Assert.That(info.ContainerItemCount).IsEqualTo(1);
     }
 

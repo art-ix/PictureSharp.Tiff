@@ -31,15 +31,50 @@ internal sealed class TiffDecoder : IImageFormatDecoder
             Format = TiffFormat.Descriptor,
             Width = layout.Width,
             Height = layout.Height,
-            HasAlpha = layout.HasAlpha,
+            Color = Color(layout, file.Image.TryGet(TiffTag.IccProfile, out _)),
+            Compression = layout.Compression switch
+            {
+                TiffLayout.CompressionNone or TiffLayout.CompressionLzw or TiffLayout.CompressionDeflate
+                    or TiffLayout.CompressionDeflateOld or TiffLayout.CompressionPackBits or TiffLayout.CompressionNeXT
+                    or TiffLayout.CompressionThunderScan => ImageCompression.Lossless,
+                _ when layout.IsCcitt => ImageCompression.Lossless,
+                6 or TiffLayout.CompressionJpeg => ImageCompression.Lossy,   // 6: old-style JPEG
+                _ => ImageCompression.Unknown,                               // WebP can be either; unknown schemes
+            },
             FrameCount = 1,
             ContainerItemCount = file.Pages,
-            BitsPerChannel = layout.BitsPerSample,
             Orientation = TiffMetadataReader.Orientation(bytes, file.Image) ?? ExifOrientation.Unknown,
-            HorizontalResolution = horizontal > 0 ? horizontal : 96f,
-            VerticalResolution = vertical > 0 ? vertical : 96f,
+            Resolution = horizontal > 0 && vertical > 0 ? new ImageResolution(horizontal, vertical) : null,
         };
     }
+
+    /// <summary>
+    /// The colour layout as the IFD declares it, also for layouts <see cref="TiffLayout.EnsureDecodable"/> rejects
+    /// (signed or float samples, LogLuv): only what the tags state, with <see cref="ImageColorModel.Other"/> for the rest.
+    /// </summary>
+    private static ImageColorInfo Color(TiffLayout layout, bool icc) => new()
+    {
+        Model = layout.Photometric switch
+        {
+            TiffLayout.WhiteIsZero or TiffLayout.BlackIsZero => ImageColorModel.Gray,
+            TiffLayout.Rgb or TiffLayout.YCbCr => ImageColorModel.Rgb,
+            TiffLayout.Palette => ImageColorModel.Palette,
+            TiffLayout.Separated when layout.InkSet == 1 && layout.SamplesPerPixel - (layout.HasAlpha ? 1 : 0) >= 4 => ImageColorModel.Cmyk,
+            TiffLayout.CieLab or 9 or 10 => ImageColorModel.Lab,   // 9 ICCLab, 10 ITULab
+            _ => ImageColorModel.Other,                            // transparency mask, other ink sets, CFA, LogL/LogLuv, LinearRaw
+        },
+        ChannelCount = layout.SamplesPerPixel,
+        BitsPerSample = layout.BitsPerSample,
+        SampleFormat = layout.SampleFormat switch
+        {
+            TiffLayout.FormatSigned => ImageSampleFormat.SignedInteger,
+            TiffLayout.FormatFloat => ImageSampleFormat.Float,
+            5 or 6 => ImageSampleFormat.Other,                     // complex integer and complex float
+            _ => ImageSampleFormat.UnsignedInteger,                // 1, and 4 (void) read as unsigned like libtiff
+        },
+        AlphaMode = !layout.HasAlpha ? ImageAlphaMode.None : layout.Associated ? ImageAlphaMode.Premultiplied : ImageAlphaMode.Straight,
+        HasIccProfile = icc,
+    };
 
     public Image Decode(ReadOnlyMemory<byte> data, ImageDecodeContext context)
     {

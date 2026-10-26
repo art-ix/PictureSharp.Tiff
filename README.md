@@ -1,7 +1,7 @@
 # PictureSharp.Tiff
 
 TIFF and BigTIFF for [PictureSharp](https://github.com/art-ix/PictureSharp), in pure C# with no native dependencies.
-Requires .NET 10+ and PictureSharp 0.7.10+.
+Requires .NET 10+ and PictureSharp 0.8.5+.
 
 ```bash
 dotnet add package PictureSharp.Tiff
