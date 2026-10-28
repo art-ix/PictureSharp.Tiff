@@ -36,7 +36,7 @@ released 2026-10-26; 0.8.0 (scope of 1.0) next.**
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Released 2026-10-22 |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Released 2026-10-23 |
 | 0.7.3 | PictureSharp 0.8.5: `ImageInfo.Color`, `Compression`, `Resolution` from `Identify` | Released 2026-10-26 |
-| 0.7.4 | PictureSharp 0.9.0: 16-bit decoding to `Rgba64` (`PreserveBitDepth`) and 16-bit encoding (`TiffBitDepth`) | Done locally (2026-10-28), waits for PictureSharp 0.9.0 on NuGet; release preparation approved; publish after the core |
+| 0.7.4 | PictureSharp 0.9.0: 16-bit decoding to `Rgba64` (`PreserveBitDepth`) and 16-bit encoding (`TiffBitDepth`) | Prepared on main (2026-10-28); publish after PictureSharp 0.9.0 |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
 | 1.0.0 | Stable release on a stable core SPI | Planned |
