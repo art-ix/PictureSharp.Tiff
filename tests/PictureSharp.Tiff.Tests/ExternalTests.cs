@@ -131,7 +131,7 @@ public sealed class ExternalTests
                 return ($"size {image.Width}x{image.Height}, libtiff {ifd.Width}x{ifd.Height}", true);
             }
 
-            return Compare(image.GetPixelSpan(), File.ReadAllBytes(Path.Combine(Dir!, ifd.Rgba)), ifd);
+            return Compare(image.GetPixelSpan<Rgba32>(), File.ReadAllBytes(Path.Combine(Dir!, ifd.Rgba)), ifd);
         }
         finally
         {

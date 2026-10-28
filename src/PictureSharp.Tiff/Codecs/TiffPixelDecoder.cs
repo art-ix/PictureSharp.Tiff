@@ -23,15 +23,19 @@ internal static class TiffPixelDecoder
 
     private const int RangesPerThread = 4;
 
-    public static void Decode(ReadOnlyMemory<byte> data, TiffDirectory ifd, TiffLayout layout, Memory<Rgba32> pixels, ImageDecodeContext context)
+    /// <summary>Decodes into the pixels of <paramref name="image"/>, 8- or 16-bit; JPEG and WebP chunks are always 8-bit.</summary>
+    public static void Decode(ReadOnlyMemory<byte> data, TiffDirectory ifd, TiffLayout layout, Image image, ImageDecodeContext context)
     {
         ReadOnlySpan<byte> bytes = data.Span;
         long perPlane = layout.ChunksPerPlane;
-        long chunks = perPlane * layout.Planes;
         var chunkTable = TiffChunks.Read(bytes, ifd, layout);
-        var job = new Job(data, ifd, layout, chunkTable, pixels, context,
+        bool wide = image.PixelType == PixelType.Rgba64;
+        var job = new Job(data, ifd, layout, chunkTable, wide ? default : image.GetPixelMemory<Rgba32>(), context,
             layout.IsJpeg && !layout.Separate ? null : TiffChunkConverter.Create(bytes, ifd, layout),
-            layout.IsJpeg ? new TiffJpeg(bytes, ifd, layout) : null);
+            layout.IsJpeg ? new TiffJpeg(bytes, ifd, layout) : null)
+        {
+            Wide = wide ? image.GetPixelMemory<Rgba64>() : default,
+        };
         if (layout.Compression == TiffLayout.CompressionLzw)
         {
             job = job with { LzwCompat = LzwCompat(job) };
@@ -271,10 +275,15 @@ internal static class TiffPixelDecoder
         }
     }
 
-    /// <summary>What every thread shares: the file, the image and the read-only converter or JPEG tables.</summary>
+    /// <summary>
+    /// What every thread shares: the file, the image and the read-only converter or JPEG tables. A 16-bit image has its
+    /// pixels in <see cref="Wide"/> and none in <see cref="Pixels"/>.
+    /// </summary>
     private sealed record Job(ReadOnlyMemory<byte> Data, TiffDirectory Ifd, TiffLayout Layout, TiffChunks Chunks,
         Memory<Rgba32> Pixels, ImageDecodeContext Context, TiffChunkConverter? Converter, TiffJpeg? Jpeg)
     {
+        public Memory<Rgba64> Wide { get; init; }
+
         public bool LzwCompat { get; init; }
 
         /// <summary>The threads converting row bands of an image in a single strip or tile; 1 otherwise.</summary>
@@ -307,11 +316,10 @@ internal static class TiffPixelDecoder
             ReadOnlySpan<byte> bytes = data.Span;
             int width = layout.Width;
             (int cx, int cy, int visibleWidth, int visibleRows) = Region(layout, c);
-            Span<Rgba32> pixels = job.Pixels.Span[(cy * width + cx)..];
             if (job.Jpeg is not null && !layout.Separate)
             {
                 ReadOnlyMemory<byte> raw = Raw(data, job.Chunks.Offset(bytes, c), job.Chunks.Count(bytes, c, (int)layout.ChunkBytes(layout.ChunkHeight)));
-                job.Jpeg.Decode(raw, job.Context, visibleWidth, visibleRows, pixels, width);
+                job.Jpeg.Decode(raw, job.Context, visibleWidth, visibleRows, job.Pixels.Span[(cy * width + cx)..], width);
                 return;
             }
 
@@ -354,7 +362,21 @@ internal static class TiffPixelDecoder
                 Unpredict(buffer.AsSpan(p * planeBytes, length));
             }
 
-            job.Converter!.Convert(chunk.Span, planeBytes, visibleWidth, visibleRows, pixels, width);
+            Convert(chunk.Span, cx, cy, visibleWidth, visibleRows);
+        }
+
+        /// <summary>Converts <paramref name="rows"/> rows of a chunk into the image at (<paramref name="x"/>, <paramref name="y"/>).</summary>
+        private void Convert(ReadOnlySpan<byte> chunk, int x, int y, int visibleWidth, int rows)
+        {
+            int width = job.Layout.Width, at = y * width + x;
+            if (job.Wide.IsEmpty)
+            {
+                job.Converter!.Convert(chunk, planeBytes, visibleWidth, rows, job.Pixels.Span[at..], width);
+            }
+            else
+            {
+                job.Converter!.Convert(chunk, planeBytes, visibleWidth, rows, job.Wide.Span[at..], width);
+            }
         }
 
         /// <summary>
@@ -378,8 +400,7 @@ internal static class TiffPixelDecoder
                         Unpredict(buffer.AsSpan(p * planeBytes + first * rowBytes, rows * rowBytes));
                     }
 
-                    job.Converter!.Convert(chunk.Span[(first * rowBytes)..], planeBytes, visibleWidth, rows,
-                        job.Pixels.Span[((cy + first) * width + cx)..], width);
+                    Convert(chunk.Span[(first * rowBytes)..], cx, cy + first, visibleWidth, rows);
                 });
             }
             catch (AggregateException e)

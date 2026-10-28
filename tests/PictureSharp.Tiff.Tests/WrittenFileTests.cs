@@ -57,8 +57,8 @@ public sealed class WrittenFileTests
         yield return ("gray_flat_300x20_packbits", () =>
         {
             var image = new Image(300, 20);
-            image.GetPixelSpan().Fill(new Rgba32(77, 77, 77, 255));
-            image.GetPixelSpan()[150] = new Rgba32(1, 1, 1, 255);
+            image.GetPixelSpan<Rgba32>().Fill(new Rgba32(77, 77, 77, 255));
+            image.GetPixelSpan<Rgba32>()[150] = new Rgba32(1, 1, 1, 255);
             return image;
         }, EncoderSupport.Options(compression: TiffCompression.PackBits), TiffColorType.Grayscale);
         yield return ("rgba_33x17_deflate_predictor", () => EncoderSupport.Pattern(33, 17, alpha: true), EncoderSupport.Options(compression: TiffCompression.Deflate), TiffColorType.Rgba);
@@ -80,7 +80,7 @@ public sealed class WrittenFileTests
         yield return ("jpeg_rgb_grey_strip_64x48_rows16", () =>
         {
             Image image = EncoderSupport.Pattern(64, 48);
-            Span<Rgba32> pixels = image.GetPixelSpan();
+            Span<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
             for (int i = 0; i < 16 * 64; i++)
             {
                 pixels[i] = new Rgba32(pixels[i].R, pixels[i].R, pixels[i].R, 255);
@@ -104,7 +104,7 @@ public sealed class WrittenFileTests
         yield return ("webp_rgba_lossless_40x30", () =>
         {
             Image image = EncoderSupport.Pattern(40, 30, alpha: true);
-            image.GetPixelSpan()[..40].Fill(new Rgba32(200, 100, 50, 0));
+            image.GetPixelSpan<Rgba32>()[..40].Fill(new Rgba32(200, 100, 50, 0));
             return image;
         }, EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgba);
         yield return ("webp_gray_lossless_16x8", () => EncoderSupport.Pattern(16, 8, gray: true), EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true }, TiffColorType.Rgb);
@@ -151,7 +151,7 @@ public sealed class WrittenFileTests
             }
             else
             {
-                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
+                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
             }
 
             string? exif = MetadataWriteTests.ExifReference(source.Metadata.Exif, Received, name);
@@ -215,15 +215,15 @@ public sealed class WrittenFileTests
 
                 string expected = compression == TiffCompression.CcittGroup4
                     ? EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite))
-                    : EncoderSupport.Sha256(source.GetPixelSpan());
-                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(expected);
+                    : EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>());
+                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(expected);
                 Record(name, compression, file, source, image, manifest);
             }
 
             // Tiles and BigTIFF together: LZW tiles of 32, so libtiff also re-encodes the tiles.
             byte[] tiled = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.Lzw) with { TileSize = 32, Container = TiffContainer.BigTiff });
             using Image tiledImage = TestSupport.Load(tiled);
-            await Assert.That(EncoderSupport.Sha256(tiledImage.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            await Assert.That(EncoderSupport.Sha256(tiledImage.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
             Record(name, "lzw-tiles-bigtiff", tiled, source, tiledImage, manifest);
         }
 
@@ -274,7 +274,7 @@ public sealed class WrittenFileTests
         ["exif"] = exif,
         ["width"] = image.Width,
         ["height"] = image.Height,
-        ["sha256"] = EncoderSupport.Sha256(image.GetPixelSpan()),
+        ["sha256"] = EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>()),
         ["dpi"] = new JsonArray(image.Metadata.HorizontalResolution, image.Metadata.VerticalResolution),
         ["icc"] = EncoderSupport.Sha256(image.Metadata.IccProfile),
         ["xmp"] = EncoderSupport.Sha256(image.Metadata.Xmp),

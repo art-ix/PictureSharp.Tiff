@@ -59,6 +59,22 @@ internal sealed class CieLabToRgb
     /// <summary>Converts 16-bit samples: L* in 0–65535, a* and b* as signed 16-bit values, 256 times the CIE values.</summary>
     public Rgba32 Convert16(uint l, int a, int b)
     {
+        (float r, float g, float bl) = Luminance(l, a, b);
+        return new Rgba32(Gun(r), Gun(g), Gun(bl), 255);
+    }
+
+    /// <summary>
+    /// <see cref="Convert16"/> to 16-bit pixels: the same luminance, with the gamma 2.4 curve evaluated exactly instead of
+    /// through the 1501-entry table, which would leave fewer than 1501 levels, and rounded once.
+    /// </summary>
+    public Rgba64 Convert16Wide(uint l, int a, int b)
+    {
+        (float r, float g, float bl) = Luminance(l, a, b);
+        return new Rgba64(GunWide(r), GunWide(g), GunWide(bl));
+    }
+
+    private (float R, float G, float B) Luminance(uint l, int a, int b)
+    {
         // TIFFCIELab16ToXYZ
         float lightness = (float)l * 100.0F / 65535.0F;
         float x, y, z, cby, tmp;
@@ -80,7 +96,16 @@ internal sealed class CieLabToRgb
 
         // TIFFXYZToRGB
         ReadOnlySpan<float> m = Matrix;
-        return new Rgba32(Gun(m[0] * x + m[1] * y + m[2] * z), Gun(m[3] * x + m[4] * y + m[5] * z), Gun(m[6] * x + m[7] * y + m[8] * z), 255);
+        return (m[0] * x + m[1] * y + m[2] * z, m[3] * x + m[4] * y + m[5] * z, m[6] * x + m[7] * y + m[8] * z);
+    }
+
+    private static ushort GunWide(float luminance)
+    {
+        // The clamping of Gun; the table holds PixelWhite * ((luminance - LightBlack) / (LightWhite - LightBlack))^(1 / Gamma).
+        luminance = luminance > LightBlack ? luminance : LightBlack;
+        luminance = luminance < LightWhite ? luminance : LightWhite;
+        double v = Math.Pow((luminance - LightBlack) / (double)(LightWhite - LightBlack), 1.0 / Gamma);
+        return (ushort)Math.Min(ushort.MaxValue, (int)(v * ushort.MaxValue + 0.5));
     }
 
     private static byte Gun(float luminance)

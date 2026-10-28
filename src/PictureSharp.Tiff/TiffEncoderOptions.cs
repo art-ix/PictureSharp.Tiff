@@ -2,7 +2,8 @@ namespace PictureSharp.Formats.Tiff;
 
 /// <summary>
 /// Options for the TIFF encoder, which writes every frame as one little-endian TIFF page, in strips or tiles with
-/// contiguous 8-bit (or 1-bit black-and-white) samples, by default LZW-compressed with the horizontal predictor.
+/// contiguous 8-bit (or 1-bit black-and-white) samples, or 16-bit samples for 16-bit images (<see cref="BitDepth"/>), by
+/// default LZW-compressed with the horizontal predictor.
 /// Resolution is always written (in dots per inch). When <see cref="EncoderOptions.Metadata"/> allows them, ICC and XMP
 /// are written as tags 34675 and 700, and the EXIF block as the image IFD's descriptive tags and orientation with its
 /// EXIF, GPS and interoperability IFDs, on every page; Software always names this encoder, and an EXIF block that is not
@@ -77,6 +78,15 @@ public sealed record TiffEncoderOptions : EncoderOptions
     /// colour of fully transparent pixels. Default: false, as libtiff.
     /// </summary>
     public bool WebPLossless { get; init; }
+
+    /// <summary>
+    /// The sample depth: 8 bits, or 16 bits for 16-bit images by default. Default: <see cref="TiffBitDepth.Auto"/>.
+    /// </summary>
+    public TiffBitDepth BitDepth
+    {
+        get;
+        init => field = Enum.IsDefined(value) ? value : throw new ArgumentOutOfRangeException(nameof(BitDepth), value, "Unknown TIFF bit depth.");
+    }
 
     /// <summary>The samples to write. Default: <see cref="TiffColorType.Auto"/>.</summary>
     public TiffColorType ColorType

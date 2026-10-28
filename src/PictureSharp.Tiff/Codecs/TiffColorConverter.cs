@@ -9,7 +9,9 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 /// <c>round(v / 16843009)</c> for 32 (no ties occur). Signed samples arrive offset by <c>2^(b - 1)</c>, so their whole
 /// range maps linearly. WhiteIsZero is inverted first, then premultiplied colour is divided by alpha at the source depth as Pillow's <c>unpackRGBa</c>
 /// does (<c>min(max, v * max / a)</c>, 0 where alpha is 0). Colour map entries become <c>round(v / 257)</c>. CMYK
-/// converts after the 8-bit reduction as Pillow's <c>cmyk2rgb</c> does.
+/// converts after the 8-bit reduction as Pillow's <c>cmyk2rgb</c> does. 16-bit pixels follow the same steps at 16 bits:
+/// samples become <c>round(v * 65535 / (2^b - 1))</c> (the identity for 16 bits, <c>round(v / 65537)</c> for 32) and CMYK
+/// converts with <c>nk - round(ink * nk / 65535)</c>.
 /// </summary>
 internal sealed class TiffColorConverter
 {
@@ -180,7 +182,70 @@ internal sealed class TiffColorConverter
         }
     }
 
+    /// <summary>16-bit pixels from samples of 9 to 16 bits (palette images are always 8-bit).</summary>
+    public void Convert(ReadOnlySpan<ushort> row, Span<Rgba64> pixels)
+    {
+        bool invert = photometric == TiffLayout.WhiteIsZero;
+        for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+        {
+            int a = alpha >= 0 ? row[s + alpha] : max;
+            if (photometric == TiffLayout.Rgb)
+            {
+                pixels[x] = new Rgba64(Color16(row[s], a), Color16(row[s + 1], a), Color16(row[s + 2], a), To16(a));
+            }
+            else if (photometric == TiffLayout.Separated)
+            {
+                uint nk = ushort.MaxValue - (uint)To16(row[s + 3]);
+                pixels[x] = new Rgba64(Ink16(To16(row[s]), nk), Ink16(To16(row[s + 1]), nk), Ink16(To16(row[s + 2]), nk), To16(a));
+            }
+            else
+            {
+                ushort g = Color16(invert ? max - row[s] : row[s], a);
+                pixels[x] = new Rgba64(g, g, g, To16(a));
+            }
+        }
+    }
+
+    /// <summary>16-bit pixels from 32-bit integer samples (signed ones already offset), greyscale or RGB.</summary>
+    public void Convert(ReadOnlySpan<uint> row, Span<Rgba64> pixels)
+    {
+        bool invert = photometric == TiffLayout.WhiteIsZero;
+        for (int x = 0, s = 0; x < pixels.Length; x++, s += samples)
+        {
+            ulong a = alpha >= 0 ? row[s + alpha] : uint.MaxValue;
+            if (photometric == TiffLayout.Rgb)
+            {
+                pixels[x] = new Rgba64(Color32To16(row[s], a), Color32To16(row[s + 1], a), Color32To16(row[s + 2], a), Reduce32To16(a));
+            }
+            else
+            {
+                ushort g = Color32To16(invert ? uint.MaxValue - row[s] : row[s], a);
+                pixels[x] = new Rgba64(g, g, g, Reduce32To16(a));
+            }
+        }
+    }
+
     private static byte Reduce16(uint v) => (byte)((v + 128) / 257);
+
+    // 2^32 - 1 = 65535 * 65537, and v + 32768 never ties.
+    private static ushort Reduce32To16(ulong v) => (ushort)((v + 32768) / 65537);
+
+    private ushort Color32To16(ulong v, ulong a) =>
+        Reduce32To16(associated && a != uint.MaxValue ? a == 0 ? 0 : Math.Min(uint.MaxValue, v * uint.MaxValue / a) : v);
+
+    private static ushort Ink16(uint ink, uint nk) => (ushort)(nk - ((ink * nk) + 32767) / 65535);
+
+    private ushort Color16(int v, int a)
+    {
+        if (associated && a != max)
+        {
+            v = a == 0 ? 0 : (int)Math.Min(max, (uint)v * (uint)max / (uint)a);
+        }
+
+        return To16(v);
+    }
+
+    private ushort To16(int v) => bits == 16 ? (ushort)v : (ushort)((((long)v * ushort.MaxValue) + (max / 2)) / max);
 
     private static byte Reduce32(ulong v) => (byte)((2 * v + 16843009) / 33686018);
 

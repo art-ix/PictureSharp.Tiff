@@ -23,13 +23,13 @@ public sealed class WebPTests
         WebPEntry entry = Index[name];
         using Image image = TestSupport.Load(TestSupport.ReadCorpus(name));
         await Assert.That((image.Width, image.Height)).IsEqualTo((entry.Width, entry.Height));
-        Rgba32[] pixels = image.GetPixelSpan().ToArray();
+        Rgba32[] pixels = image.GetPixelSpan<Rgba32>().ToArray();
         int mismatches = 0;
         foreach (JsonElement[] chunk in entry.Chunks)
         {
             (string file, int x0, int y0, int w, int h) = (chunk[0].GetString()!, chunk[1].GetInt32(), chunk[2].GetInt32(), chunk[3].GetInt32(), chunk[4].GetInt32());
             using Image webp = TestSupport.Load(TestSupport.ReadCorpus(file));
-            Rgba32[] decoded = webp.GetPixelSpan().ToArray();
+            Rgba32[] decoded = webp.GetPixelSpan<Rgba32>().ToArray();
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
@@ -48,7 +48,7 @@ public sealed class WebPTests
     {
         using Image image = TestSupport.Load(TestSupport.ReadCorpus(name));
         using Image pillow = TestSupport.Load(TestSupport.ReadCorpus(Index[name].Pillow));
-        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(pillow.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(pillow.GetPixelSpan<Rgba32>()));
     }
 
     [Test]
@@ -82,7 +82,7 @@ public sealed class WebPTests
         using Image source = EncoderSupport.Pattern(16, 8, alpha: true);
         byte[] data = Rgb(16, 8, 3, source.ToWebP(new WebPEncoderOptions { Lossless = true, Exact = true })).Build();
         using Image image = TestSupport.Load(data);
-        await Assert.That(image.GetPixelSpan().SequenceEqual(EncoderSupport.Expected(source, TiffColorType.Rgb))).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().SequenceEqual(EncoderSupport.Expected(source, TiffColorType.Rgb))).IsTrue();
     }
 
     [Test]
@@ -91,7 +91,7 @@ public sealed class WebPTests
         using Image source = EncoderSupport.Pattern(16, 8);
         byte[] data = Rgb(16, 8, 4, source.ToWebP(new WebPEncoderOptions { Lossless = true })).Set(338, TiffBuilder.Short, 2).Build();
         using Image image = TestSupport.Load(data);
-        await Assert.That(image.GetPixelSpan().SequenceEqual(source.GetPixelSpan())).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().SequenceEqual(source.GetPixelSpan<Rgba32>())).IsTrue();
     }
 
     [Test]
@@ -140,7 +140,7 @@ public sealed class WebPTests
         if (alpha)
         {
             // Fully transparent pixels whose colour must survive (libwebp's "exact").
-            source.GetPixelSpan()[..width].Fill(new Rgba32(200, 100, 50, 0));
+            source.GetPixelSpan<Rgba32>()[..width].Fill(new Rgba32(200, 100, 50, 0));
         }
 
         byte[] file = source.ToTiff(EncoderSupport.Options(rowsPerStrip: rowsPerStrip, compression: TiffCompression.WebP) with { WebPLossless = true });
@@ -149,7 +149,7 @@ public sealed class WebPTests
         await Assert.That(tags[277].Value).IsEqualTo(alpha ? 4u : 3u);
         await Assert.That(tags.ContainsKey(338)).IsEqualTo(alpha);
         using Image image = TestSupport.Load(file);
-        await Assert.That(image.GetPixelSpan().SequenceEqual(source.GetPixelSpan())).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().SequenceEqual(source.GetPixelSpan<Rgba32>())).IsTrue();
         await Assert.That(EncoderSupport.StripsMatch(file, image)).IsTrue();
         await Assert.That(EncoderSupport.Strips(file).All(s => Encoding.ASCII.GetString(s, 12, 4) == "VP8L")).IsTrue();
     }
@@ -164,7 +164,7 @@ public sealed class WebPTests
         await Assert.That(EncoderSupport.StripsMatch(file, image)).IsTrue();
 
         using Image top = new(96, 32);
-        source.GetPixelSpan()[..(96 * 32)].CopyTo(top.GetPixelSpan());
+        source.GetPixelSpan<Rgba32>()[..(96 * 32)].CopyTo(top.GetPixelSpan<Rgba32>());
         byte[] webp = top.ToWebP(new WebPEncoderOptions { Quality = 75, Metadata = MetadataKinds.None });
         await Assert.That(EncoderSupport.Strips(file)[0].AsSpan().SequenceEqual(webp)).IsTrue();
         await Assert.That(Psnr(source, image)).IsGreaterThan(30);
@@ -178,7 +178,7 @@ public sealed class WebPTests
         byte[] high = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPQuality = 95 });
         await Assert.That(low.Length).IsLessThan(high.Length);
         using Image image = TestSupport.Load(high);
-        await Assert.That(image.GetPixelSpan().ToArray().Select(p => p.A).SequenceEqual(source.GetPixelSpan().ToArray().Select(p => p.A))).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().ToArray().Select(p => p.A).SequenceEqual(source.GetPixelSpan<Rgba32>().ToArray().Select(p => p.A))).IsTrue();
         await Assert.That(Psnr(source, image)).IsGreaterThan(35);
     }
 
@@ -213,7 +213,7 @@ public sealed class WebPTests
         byte[] file = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.WebP) with { WebPLossless = true });
         await Assert.That(EncoderSupport.Tags(file)[262].Value).IsEqualTo(2u);
         using Image image = TestSupport.Load(file);
-        await Assert.That(image.GetPixelSpan().SequenceEqual(source.GetPixelSpan())).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().SequenceEqual(source.GetPixelSpan<Rgba32>())).IsTrue();
     }
 
     [Test]
@@ -230,7 +230,7 @@ public sealed class WebPTests
         byte[] file = source.ToTiff(EncoderSupport.Options(rowsPerStrip: 20000, compression: TiffCompression.WebP) with { WebPLossless = true });
         await Assert.That(EncoderSupport.Tags(file)[278].Value).IsEqualTo(16383u);
         using Image image = TestSupport.Load(file);
-        await Assert.That(image.GetPixelSpan().SequenceEqual(source.GetPixelSpan())).IsTrue();
+        await Assert.That(image.GetPixelSpan<Rgba32>().SequenceEqual(source.GetPixelSpan<Rgba32>())).IsTrue();
     }
 
     [Test]
@@ -257,7 +257,7 @@ public sealed class WebPTests
     private static Image Smooth(int width, int height, bool alpha = false)
     {
         var image = new Image(width, height);
-        Span<Rgba32> pixels = image.GetPixelSpan();
+        Span<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -272,7 +272,7 @@ public sealed class WebPTests
 
     private static double Psnr(Image a, Image b)
     {
-        ReadOnlySpan<Rgba32> p = a.GetPixelSpan(), q = b.GetPixelSpan();
+        ReadOnlySpan<Rgba32> p = a.GetPixelSpan<Rgba32>(), q = b.GetPixelSpan<Rgba32>();
         double sum = 0;
         for (int i = 0; i < p.Length; i++)
         {

@@ -97,6 +97,12 @@ internal sealed class TiffLayout
     public int EffectivePredictor => Compression is CompressionLzw or CompressionDeflate or CompressionDeflateOld ? Predictor : 1;
 
     /// <summary>Whether the samples are packed YCbCr blocks: one Cb and Cr per Horizontal x Vertical luma samples.</summary>
+    /// <summary>
+    /// Whether colour or alpha samples have more than 8 bits, so that <see cref="DecoderOptions.PreserveBitDepth"/>
+    /// decodes to <see cref="PixelType.Rgba64"/>. Palette indices do not count: colour maps hold 8-bit colours in practice.
+    /// </summary>
+    public bool HasDeepSamples => BitsPerSample > 8 && Photometric != Palette;
+
     public bool IsSubsampledYCbCr => Photometric == YCbCr && !IsJpeg && Subsampling != (1, 1);
 
     /// <summary>Bytes in one row of a strip or tile of one plane, padded to a whole byte.</summary>

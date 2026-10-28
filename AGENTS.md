@@ -21,7 +21,7 @@ in PictureSharp itself go to the core repository's `plan.md` (sibling folder `..
   from the core.
 - Do not use the `unsafe` keyword. Use `Span<T>`, `ref`, `Unsafe.Add` and `MemoryMarshal`.
 - Public API uses `PictureSharp.Formats.Tiff` (`TiffFormat`, `ImageFormat.Tiff`); codecs are `internal`.
-- Return `Image` pixels as `Rgba32` with straight alpha; reduce deeper samples to 8 bits with documented rounding.
+- Return straight alpha as `Rgba32` by default, or `Rgba64` for deeper sources with `PreserveBitDepth`. Reserve the actual pixel type and encode 16-bit samples without reducing through 8 bits.
 - Call `ImageDecodeContext.ReservePixels` / `ReserveMetadata` before allocating and check cancellation between strips
   and tiles. Corrupt input must throw `ImageFormatException`; valid input with unsupported features must throw
   `NotSupportedException`. Malicious input must never expose other exceptions.

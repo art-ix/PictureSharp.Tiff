@@ -1,10 +1,10 @@
 # PictureSharp.Tiff
 
 TIFF and BigTIFF for [PictureSharp](https://github.com/art-ix/PictureSharp), in pure C# with no native dependencies.
-Requires .NET 10+ and PictureSharp 0.8.5+.
+Requires .NET 10+ and PictureSharp 0.9.0+.
 
 ```bash
-dotnet add package PictureSharp.Tiff
+dotnet add package PictureSharp.Tiff --version 0.7.4
 ```
 
 ## Usage
@@ -25,15 +25,26 @@ image.SaveAsTiff("small.tif");
 Loading reads the first page and keeps ICC, EXIF and XMP. Saving uses lossless LZW and writes each frame as a page.
 Other pages, JPEG compression and tiles are covered in the guides below.
 
+## Keep 16-bit samples
+
+```csharp
+using Image scan = Image.Load("scan.tif", new DecoderOptions { PreserveBitDepth = true });
+scan.SaveAsTiff("copy.tif", new TiffEncoderOptions { BitDepth = TiffBitDepth.Sixteen });
+```
+
+Default loading uses 8-bit pixels. Use `PreserveBitDepth` for deeper scans; processing keeps that precision.
+See the [0.7.4 changes](https://github.com/art-ix/PictureSharp.Tiff/blob/main/docs/releases/release-0.7.4.md).
+
 ## Support
 
 - **Read:** strips and tiles; none, PackBits, LZW, Deflate, JPEG, WebP, CCITT fax, NeXT and ThunderScan; grey,
   palette, RGB, CMYK, YCbCr and CIE L*a*b*, with or without alpha; integer samples of 1 to 16 and 32 bits (also
-  signed), float of 16, 32 and 64 bits.
-- **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha; the same compressions except
-  NeXT and ThunderScan (CCITT Group 4 only).
+  signed), float of 16, 32 and 64 bits; with `DecoderOptions.PreserveBitDepth`, samples of more than 8 bits decode
+  to 16-bit images (`PixelType.Rgba64`).
+- **Write:** 8-bit grey, RGB, palette and black and white, with or without alpha, and 16-bit grey and RGB from 16-bit
+  images; the same compressions except NeXT and ThunderScan (CCITT Group 4 only).
 - **Metadata:** ICC, XMP, EXIF/GPS, orientation and resolution, also edited in place.
-- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, ICC and ITU L*a*b*; writing 16-bit, CMYK or planar data.
+- **Not supported:** old-style JPEG, JBIG, LZMA, Zstandard, ICC and ITU L*a*b*; writing CMYK or planar data.
 
 Pixels match libtiff 4.5.1 and Pillow 10.2.0.
 

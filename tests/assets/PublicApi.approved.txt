@@ -1,3 +1,4 @@
+PictureSharp.Formats.Tiff.TiffBitDepth
 PictureSharp.Formats.Tiff.TiffColorType
 PictureSharp.Formats.Tiff.TiffCompression
 PictureSharp.Formats.Tiff.TiffContainer
@@ -39,6 +40,8 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   Int32 get_WebPQuality()
   PictureSharp.Formats.Jpeg.JpegSubsampling JpegSubsampling
   PictureSharp.Formats.Jpeg.JpegSubsampling get_JpegSubsampling()
+  PictureSharp.Formats.Tiff.TiffBitDepth BitDepth
+  PictureSharp.Formats.Tiff.TiffBitDepth get_BitDepth()
   PictureSharp.Formats.Tiff.TiffColorType ColorType
   PictureSharp.Formats.Tiff.TiffColorType get_ColorType()
   PictureSharp.Formats.Tiff.TiffCompression Compression
@@ -52,6 +55,7 @@ PictureSharp.Formats.Tiff.TiffEncoderOptions
   PictureSharp.ImageFormat get_Format()
   System.String ToString()
   Void .ctor()
+  Void set_BitDepth(PictureSharp.Formats.Tiff.TiffBitDepth)
   Void set_ColorType(PictureSharp.Formats.Tiff.TiffColorType)
   Void set_Compression(PictureSharp.Formats.Tiff.TiffCompression)
   Void set_Container(PictureSharp.Formats.Tiff.TiffContainer)

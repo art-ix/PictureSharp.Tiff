@@ -63,7 +63,7 @@ error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed
 
 ### Conversion to 8 bits
 
-`Image` holds 8-bit straight-alpha RGBA, so deeper samples are reduced:
+By default `Image` holds 8-bit straight-alpha RGBA, so deeper samples are reduced:
 
 - Unsigned b-bit samples: `round(v * 255 / (2^b - 1))`. This is exact for 1, 2, 4 and 8 bits, `round(v / 257)` for
   16 bits and `round(v / 16843009)` for 32 bits; no ties occur. Depths other than 8, 16 and 32 are packed MSB first.
@@ -80,6 +80,25 @@ error (`ImageFormatException`). Old-style JPEG, Zstandard and JBIG are discussed
   tag (CIE D50 without it, as Photoshop assumes), then with libtiff's sRGB display matrix and a gamma 2.4 table, in
   single precision. There is no chromatic adaptation, so a D50 white comes out slightly yellow (255, 252, 222); a
   D65 white point gives white.
+
+### 16-bit images
+
+With `DecoderOptions.PreserveBitDepth`, a page whose samples have more than 8 bits (integer of 9 to 16 or 32 bits,
+signed or not, floating point, 16-bit CMYK and L*a*b*) decodes to a 16-bit image (`PixelType.Rgba64`); palette, YCbCr,
+JPEG, WebP and other pages of up to 8 bits stay 8-bit. A 16-bit pixel counts twice against `DecoderOptions.MaxPixels`.
+The same rules apply at 16 bits, with one rounding:
+
+- Unsigned b-bit samples: `round(v * 65535 / (2^b - 1))`: 16-bit samples are kept as they are, 32-bit ones become
+  `round(v / 65537)`. Signed samples are offset as above.
+- Floating point: clamped to [0, 1], then `(int)(v * 65535 + 0.5)`, in the same precision as for 8 bits.
+- Associated alpha is unpremultiplied at the source depth; MinIsWhite is inverted at the source depth.
+- CMYK: `nk - round(ink * nk / 65535)` with `nk = 65535 - black`, Pillow's formula at 16 bits.
+- CIE L*a*b*: libtiff's conversion to linear light, then the gamma 2.4 curve evaluated exactly instead of looked up in
+  libtiff's 1501-step table, which near black is up to 12 levels (8-bit) darker than the curve.
+
+Rounding the 16-bit result to 8 bits gives the 8-bit decode within one level (L*a*b* within the table error above);
+for 16-bit grey and RGB with straight or no alpha it gives the 8-bit decode exactly. A `ConvertToSrgb` with an ICC
+profile then runs in floating point on the 16-bit samples.
 
 ### JPEG and WebP strips
 

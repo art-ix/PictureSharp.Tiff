@@ -30,5 +30,18 @@ foreach (JsonProperty file in reference.RootElement.EnumerateObject().OrderBy(p 
     }
 }
 
+using (var source = new Image(256, 256, PixelType.Rgba64))
+{
+    Span<Rgba64> pixels = source.GetPixelSpan<Rgba64>();
+    for (int i = 0; i < pixels.Length; i++) pixels[i] = new Rgba64((ushort)i, (ushort)(65535 - i), (ushort)i, (ushort)i);
+    foreach (TiffCompression compression in new[] { TiffCompression.Lzw, TiffCompression.Deflate })
+    {
+        byte[] data = source.ToTiff(new TiffEncoderOptions { Compression = compression });
+        using Image decoded = Image.Load(data.AsSpan(), new DecoderOptions { PreserveBitDepth = true });
+        if (decoded.PixelType != PixelType.Rgba64 || !decoded.GetPixelSpan<Rgba64>().SequenceEqual(pixels))
+            throw new InvalidOperationException($"16-bit {compression} round-trip changed pixels.");
+    }
+}
+
 Console.WriteLine($"{checkedPages} decodes checked, {mismatches} mismatches");
 return mismatches == 0 ? 0 : 1;

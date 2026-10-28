@@ -25,7 +25,7 @@ internal static class TestSupport
     public static DecoderOptions Page(int page) => Options with { FormatOptions = [new TiffDecoderOptions { Page = page }] };
 
     public static string Sha256(Image image) =>
-        Convert.ToHexStringLower(SHA256.HashData(MemoryMarshal.AsBytes(image.GetPixelSpan())));
+        Convert.ToHexStringLower(SHA256.HashData(MemoryMarshal.AsBytes(image.GetPixelSpan<Rgba32>())));
 }
 
 internal sealed record ReferenceEntry(int Width, int Height, string Oracle, string Sha256, IReadOnlyList<ReferenceEntry>? Pages = null);

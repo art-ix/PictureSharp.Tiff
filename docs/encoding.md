@@ -15,6 +15,7 @@ options set `Configuration`. The stream is left open; a stream that cannot seek 
 | --- | --- | --- |
 | `Compression` | `Lzw` | `None`, `PackBits`, `Lzw`, `Deflate`, `Jpeg`, `WebP` or `CcittGroup4` |
 | `ColorType` | `Auto` | `Grayscale`, `GrayscaleAlpha`, `Rgb`, `Rgba`, `Palette`, `BlackWhite`, or the smallest lossless one |
+| `BitDepth` | `Auto` | `UpTo8`, `Sixteen`, or 16 bits for 16-bit images ([below](#16-bit-samples)) |
 | `Predictor` | `Auto` | `Horizontal` (2) or `None`; `Auto` is horizontal for LZW and Deflate, except palette and black and white |
 | `DeflateLevel` | 6 | 0 (store) to 9 (best), the zlib level |
 | `JpegQuality` | 75 | 1–100, as the JPEG encoder |
@@ -52,10 +53,10 @@ opaque; Group 4 converts to black and white. Any other colour type with these th
 
 | `ColorType` | Samples | From colour pixels |
 | --- | --- | --- |
-| `Grayscale` | 8-bit grey | luminance (0.299 R + 0.587 G + 0.114 B), alpha dropped |
-| `GrayscaleAlpha` | 8-bit grey + unassociated alpha | luminance |
-| `Rgb` | 3 x 8 bits | alpha dropped |
-| `Rgba` | 4 x 8 bits, unassociated alpha | as is |
+| `Grayscale` | 8-bit (or 16-bit) grey | luminance (0.299 R + 0.587 G + 0.114 B), alpha dropped |
+| `GrayscaleAlpha` | 8-bit or 16-bit grey + unassociated alpha | luminance |
+| `Rgb` | 3 x 8 or 16 bits | alpha dropped |
+| `Rgba` | 4 x 8 or 16 bits, unassociated alpha | as is |
 | `Palette` | 8-bit indices, 256-entry colour map | alpha dropped; more than 256 colours throws `InvalidOperationException` |
 | `BlackWhite` | 1 bit, WhiteIsZero | black when the luminance is below 128; alpha dropped |
 
@@ -68,6 +69,29 @@ opaque; Group 4 converts to black and white. Any other colour type with these th
 4. otherwise RGB, or RGBA when a pixel is not opaque.
 
 Dropped alpha is discarded, not composited over a background.
+
+## 16-bit samples
+
+A 16-bit image (`PixelType.Rgba64`, e.g. decoded with `PreserveBitDepth`) is written with 16-bit little-endian
+samples, so nothing is lost:
+
+```csharp
+using Image scan = Image.Load("scan.tif", new DecoderOptions { PreserveBitDepth = true });
+scan.Mutate(x => x.AutoContrast());
+scan.SaveAsTiff("scan-out.tif");                                             // 16-bit RGB(A) or grey, LZW + predictor
+```
+
+| `BitDepth` | 8-bit image | 16-bit image |
+| --- | --- | --- |
+| `Auto` | 8 bits, as above | 16 bits; 8 bits without loss when every sample is a multiple of 257 (a widened 8-bit image); rounded to 8 bits with `Jpeg`, `WebP` and `CcittGroup4` |
+| `UpTo8` | 8 bits | rounded to 8 bits once, then written as an 8-bit image |
+| `Sixteen` | widened exactly (v × 257) | 16 bits |
+
+At 16 bits `Auto` chooses greyscale when every pixel has R = G = B and RGB otherwise, with alpha only when a pixel is not
+opaque; greyscale from colour uses the same luminance at 16 bits. 16-bit samples work with every lossless compression
+and the horizontal predictor. `Palette` and `BlackWhite` have no 16-bit form: with a 16-bit depth they throw
+`ArgumentException`, as do `Sixteen` with `Jpeg`, `WebP` or `CcittGroup4`; use `UpTo8` to round instead. A page written
+at another depth than the image stores is converted from a copy of its frame, which needs memory for one more frame.
 
 ## Strips, tiles and BigTIFF
 

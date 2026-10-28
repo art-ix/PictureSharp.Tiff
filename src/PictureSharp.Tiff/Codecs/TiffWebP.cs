@@ -31,7 +31,7 @@ internal static class TiffWebP
             throw TiffDecoder.Error($"A TIFF WebP strip or tile decodes to {image.Width}x{image.Height}, smaller than its {layout.ChunkWidth}x{segmentHeight} pixels.");
         }
 
-        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan();
+        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan<Rgba32>();
         int spp = layout.SamplesPerPixel, at = 0;
         for (int y = 0; y < segmentHeight; y++)
         {

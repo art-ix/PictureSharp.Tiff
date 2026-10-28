@@ -48,11 +48,31 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         Validate(image, options);
         int pageCount = options.SaveAllPages ? image.FrameCount : 1;
         var pages = new Page[pageCount];
-        for (int i = 0; i < pageCount; i++)
+        // Pages written at another depth than the image stores read a converted copy of their frame.
+        var copies = new List<Image>();
+        try
         {
-            pages[i] = Plan(image, image.Frames[i], options, pageCount > 1 ? i : -1, pageCount);
-        }
+            for (int i = 0; i < pageCount; i++)
+            {
+                pages[i] = Plan(image, image.Frames[i], options, pageCount > 1 ? i : -1, pageCount, copies);
+            }
 
+            Write(image, pages, output, options, cancellationToken);
+        }
+        finally
+        {
+            foreach (Image copy in copies)
+            {
+                copy.Dispose();
+            }
+        }
+    }
+
+    public bool SupportsPixelType(PixelType pixelType) => pixelType is PixelType.Rgba32 or PixelType.Rgba64;
+
+    private static void Write(Image image, Page[] pages, Stream output, TiffEncoderOptions options, CancellationToken cancellationToken)
+    {
+        int pageCount = pages.Length;
         // The IFD sizes do not depend on the offsets, so the size of uncompressed output is known before any output;
         // compressed chunks are checked against classic TIFF's 4 GiB as they are written.
         long classicIfds = pages.Sum(page => Ifd(image, page, bigTiff: false).Size);
@@ -167,16 +187,96 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 
         if (options.Predictor == TiffPredictor.Horizontal && options.ColorType == TiffColorType.BlackWhite)
         {
-            throw new ArgumentException("The horizontal predictor applies only to 8-bit samples, not black and white.", nameof(options));
+            throw new ArgumentException("The horizontal predictor applies only to 8- or 16-bit samples, not black and white.", nameof(options));
+        }
+
+        if (options.BitDepth == TiffBitDepth.Sixteen && compression is TiffCompression.Jpeg or TiffCompression.WebP or TiffCompression.CcittGroup4)
+        {
+            throw new ArgumentException($"{compression} compression stores 8-bit samples only; use TiffBitDepth.Auto or UpTo8.", nameof(options));
+        }
+
+        if (options.BitDepth == TiffBitDepth.Sixteen && options.ColorType is TiffColorType.Palette or TiffColorType.BlackWhite)
+        {
+            throw new ArgumentException($"A {options.ColorType} TIFF has no 16-bit samples; use TiffBitDepth.Auto or UpTo8.", nameof(options));
         }
     }
 
-    /// <summary>The colour type, palette and chunk layout of one page; <paramref name="index"/> is -1 for a single page.</summary>
-    private static Page Plan(Image image, ImageFrame frame, TiffEncoderOptions options, int index, int count)
+    /// <summary>The sample depth of a page, 8 or 16 bits (see <see cref="TiffBitDepth"/>).</summary>
+    private static int Bits(ImageFrame frame, TiffEncoderOptions options) => options.BitDepth switch
+    {
+        TiffBitDepth.Sixteen => 16,
+        TiffBitDepth.UpTo8 => 8,
+        _ => frame.PixelType == PixelType.Rgba64
+            && options.Compression is not (TiffCompression.Jpeg or TiffCompression.WebP or TiffCompression.CcittGroup4)
+            && !TiffPixelScan.IsExact8(frame.GetPixelSpan<Rgba64>()) ? 16 : 8,
+    };
+
+    /// <summary>A copy of <paramref name="frame"/> at <paramref name="pixelType"/>: rounded to 8 bits, or widened exactly.</summary>
+    private static ImageFrame Converted(ImageFrame frame, PixelType pixelType, List<Image> copies)
+    {
+        var copy = new Image(frame.Width, frame.Height, pixelType);
+        copies.Add(copy);
+        if (pixelType == PixelType.Rgba32)
+        {
+            frame.CopyPixelDataTo(copy.GetPixelByteSpan(), PixelFormat.Rgba32);
+        }
+        else
+        {
+            ReadOnlySpan<Rgba32> source = frame.GetPixelSpan<Rgba32>();
+            Span<Rgba64> target = copy.GetPixelSpan<Rgba64>();
+            for (int i = 0; i < source.Length; i++)
+            {
+                target[i] = Rgba64.FromRgba32(source[i]);
+            }
+        }
+
+        return copy.Frames.RootFrame;
+    }
+
+    /// <summary>
+    /// The depth, colour type, palette and chunk layout of one page; <paramref name="index"/> is -1 for a single page. A
+    /// page at another depth than the frame stores reads a copy added to <paramref name="copies"/>.
+    /// </summary>
+    private static Page Plan(Image image, ImageFrame frame, TiffEncoderOptions options, int index, int count, List<Image> copies)
     {
         TiffCompression compression = options.Compression;
-        ReadOnlySpan<Rgba32> pixels = frame.GetPixelSpan();
+        int bits = Bits(frame, options);
+        if ((bits == 16) != (frame.PixelType == PixelType.Rgba64))
+        {
+            frame = Converted(frame, bits == 16 ? PixelType.Rgba64 : PixelType.Rgba32, copies);
+        }
+
         Dictionary<uint, byte>? palette = null;
+        TiffColorType colorType;
+        if (bits == 16)
+        {
+            if (options.ColorType is TiffColorType.Palette or TiffColorType.BlackWhite)
+            {
+                throw new ArgumentException($"A {options.ColorType} TIFF has no 16-bit samples; use TiffBitDepth.UpTo8 to round the image.", nameof(options));
+            }
+
+            (bool opaque, bool gray) = options.ColorType == TiffColorType.Auto ? TiffPixelScan.Scan(frame.GetPixelSpan<Rgba64>()) : default;
+            colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
+                : (gray, opaque) switch
+                {
+                    (true, true) => TiffColorType.Grayscale,
+                    (true, false) => TiffColorType.GrayscaleAlpha,
+                    (false, true) => TiffColorType.Rgb,
+                    _ => TiffColorType.Rgba,
+                };
+        }
+        else
+        {
+            colorType = Choose8(frame.GetPixelSpan<Rgba32>(), options, out palette);
+        }
+
+        return Plan(image, frame, options, index, count, bits, colorType, palette);
+    }
+
+    private static TiffColorType Choose8(ReadOnlySpan<Rgba32> pixels, TiffEncoderOptions options, out Dictionary<uint, byte>? palette)
+    {
+        TiffCompression compression = options.Compression;
+        palette = null;
         TiffColorType colorType = options.ColorType != TiffColorType.Auto ? options.ColorType
             : compression == TiffCompression.CcittGroup4 ? TiffColorType.BlackWhite
             : compression == TiffCompression.Jpeg ? (IsGray(pixels) ? TiffColorType.Grayscale : TiffColorType.Rgb)
@@ -188,6 +288,13 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                 ?? throw new InvalidOperationException("The image has more than 256 colours and cannot be saved as a palette TIFF.");
         }
 
+        return colorType;
+    }
+
+    private static Page Plan(Image image, ImageFrame frame, TiffEncoderOptions options, int index, int count, int bits, TiffColorType colorType,
+        Dictionary<uint, byte>? palette)
+    {
+        TiffCompression compression = options.Compression;
         int samplesPerPixel = colorType switch
         {
             TiffColorType.Grayscale or TiffColorType.Palette or TiffColorType.BlackWhite => 1,
@@ -202,7 +309,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         int width = frame.Width, height = frame.Height;
         bool tiled = options.TileSize > 0;
         int chunkWidth = tiled ? options.TileSize : width;
-        long rowBytes = colorType == TiffColorType.BlackWhite ? (chunkWidth + 7L) / 8 : (long)chunkWidth * samplesPerPixel;
+        long rowBytes = colorType == TiffColorType.BlackWhite ? (chunkWidth + 7L) / 8 : (long)chunkWidth * samplesPerPixel * (bits / 8);
         int chunkHeight;
         if (tiled)
         {
@@ -227,7 +334,10 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             options.JpegSubsampling, palette, index, count,
             (options.Metadata & MetadataKinds.Icc) != 0 ? image.Metadata.IccProfile : null,
             (options.Metadata & MetadataKinds.Xmp) != 0 ? image.Metadata.Xmp : null,
-            (options.Metadata & MetadataKinds.Exif) != 0 ? image.Metadata.Exif : null);
+            (options.Metadata & MetadataKinds.Exif) != 0 ? image.Metadata.Exif : null)
+        {
+            Bits = bits,
+        };
     }
 
     /// <summary>
@@ -352,7 +462,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 
         ifd.AddLong(TiffTag.ImageWidth, (uint)layout.Frame.Width);
         ifd.AddLong(TiffTag.ImageLength, (uint)layout.Frame.Height);
-        Span<ushort> bits = [8, 8, 8, 8];
+        ushort depth = (ushort)layout.Bits;
+        Span<ushort> bits = [depth, depth, depth, depth];
         ifd.AddShort(TiffTag.BitsPerSample, layout.ColorType == TiffColorType.BlackWhite ? [1] : bits[..layout.SamplesPerPixel]);
         ifd.AddShort(TiffTag.Compression, layout.Compression switch
         {
@@ -484,6 +595,9 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         bool Horizontal, bool Tiled, int ChunkWidth, int ChunkHeight, long RowBytes, JpegSubsampling JpegSubsampling,
         Dictionary<uint, byte>? Palette, int Index, int Count, byte[]? Icc, byte[]? Xmp, byte[]? Exif)
     {
+        /// <summary>The bits of each sample, 8 or 16; black and white has 1 whatever this says.</summary>
+        public int Bits { get; init; } = 8;
+
         public int Across => Tiled ? (Frame.Width + ChunkWidth - 1) / ChunkWidth : 1;
 
         public int Chunks => Across * (int)(((long)Frame.Height + ChunkHeight - 1) / ChunkHeight);
@@ -554,6 +668,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         private readonly byte[] _samples;
         private readonly byte[]? _packed;
         private readonly Rgba32[]? _row;
+        private readonly Rgba64[]? _wideRow;
         private readonly LzwEncoder? _lzw;
         private readonly Fax4Encoder? _fax4;
         private readonly DeflateEncoder? _deflate;
@@ -567,7 +682,8 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             bool image = compression is TiffCompression.Jpeg or TiffCompression.WebP;
             _samples = image ? [] : ArrayPool<byte>.Shared.Rent((int)page.ChunkBytes);
             _packed = compression is TiffCompression.PackBits or TiffCompression.Lzw ? ArrayPool<byte>.Shared.Rent((int)page.Bound) : null;
-            _row = page.Tiled && !image ? ArrayPool<Rgba32>.Shared.Rent(page.ChunkWidth) : null;
+            _row = page.Tiled && !image && page.Bits == 8 ? ArrayPool<Rgba32>.Shared.Rent(page.ChunkWidth) : null;
+            _wideRow = page.Tiled && page.Bits == 16 ? ArrayPool<Rgba64>.Shared.Rent(page.ChunkWidth) : null;
             _lzw = compression == TiffCompression.Lzw ? new LzwEncoder() : null;
             _fax4 = compression == TiffCompression.CcittGroup4 ? new Fax4Encoder() : null;
             _deflate = compression == TiffCompression.Deflate ? new DeflateEncoder(options.DeflateLevel) : null;
@@ -613,7 +729,48 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
 
             int rowBytes = (int)page.RowBytes;
             Span<byte> samples = _samples.AsSpan(0, rows * rowBytes);
-            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan();
+            if (page.Bits == 16)
+            {
+                PackWide(samples, x0, y0, width, visibleRows, rows);
+            }
+            else
+            {
+                Pack(samples, x0, y0, width, visibleRows, rows);
+            }
+
+            return page.Compression switch
+            {
+                TiffCompression.PackBits => _packed.AsSpan(0, PackBitsEncoder.Encode(samples, rowBytes, _packed)),
+                TiffCompression.Lzw => _packed.AsSpan(0, _lzw!.Encode(samples, _packed)),
+                TiffCompression.Deflate => _deflate!.Encode(samples),
+                TiffCompression.CcittGroup4 => _fax4!.Encode(samples, rowBytes, page.ChunkWidth),
+                _ => samples,
+            };
+        }
+
+        private void PackWide(Span<byte> samples, int x0, int y0, int width, int visibleRows, int rows)
+        {
+            Page page = _page;
+            int rowBytes = (int)page.RowBytes;
+            ReadOnlySpan<Rgba64> pixels = page.Frame.GetPixelSpan<Rgba64>();
+            for (int y = 0; y < rows; y++)
+            {
+                ReadOnlySpan<Rgba64> source = pixels.Slice((y0 + Math.Min(y, visibleRows - 1)) * page.Frame.Width + x0, width);
+                ReadOnlySpan<Rgba64> row = _wideRow is null ? source : Pad(source, _wideRow.AsSpan(0, page.ChunkWidth));
+                TiffSamplePacker.Pack(row, samples.Slice(y * rowBytes, rowBytes), page.SamplesPerPixel);
+            }
+
+            if (page.Horizontal)
+            {
+                HorizontalPredictor.Encode16(samples, rowBytes, page.SamplesPerPixel);
+            }
+        }
+
+        private void Pack(Span<byte> samples, int x0, int y0, int width, int visibleRows, int rows)
+        {
+            Page page = _page;
+            int rowBytes = (int)page.RowBytes;
+            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan<Rgba32>();
             for (int y = 0; y < rows; y++)
             {
                 ReadOnlySpan<Rgba32> source = pixels.Slice((y0 + Math.Min(y, visibleRows - 1)) * page.Frame.Width + x0, width);
@@ -637,15 +794,6 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             {
                 HorizontalPredictor.Encode8(samples, rowBytes, page.SamplesPerPixel);
             }
-
-            return page.Compression switch
-            {
-                TiffCompression.PackBits => _packed.AsSpan(0, PackBitsEncoder.Encode(samples, rowBytes, _packed)),
-                TiffCompression.Lzw => _packed.AsSpan(0, _lzw!.Encode(samples, _packed)),
-                TiffCompression.Deflate => _deflate!.Encode(samples),
-                TiffCompression.CcittGroup4 => _fax4!.Encode(samples, rowBytes, page.ChunkWidth),
-                _ => samples,
-            };
         }
 
         public void Dispose()
@@ -665,6 +813,11 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
                 ArrayPool<Rgba32>.Shared.Return(_row);
             }
 
+            if (_wideRow is not null)
+            {
+                ArrayPool<Rgba64>.Shared.Return(_wideRow);
+            }
+
             _deflate?.Dispose();
             _part?.Dispose();
         }
@@ -682,9 +835,9 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
             Page page = _page;
             bool alpha = page.ColorType == TiffColorType.Rgba;
             int partWidth = page.Tiled ? page.ChunkWidth : width;
-            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan();
+            ReadOnlySpan<Rgba32> pixels = page.Frame.GetPixelSpan<Rgba32>();
             using var part = new Image(partWidth, rows);
-            Span<Rgba32> target = part.GetPixelSpan();
+            Span<Rgba32> target = part.GetPixelSpan<Rgba32>();
             for (int y = 0; y < rows; y++)
             {
                 ReadOnlySpan<Rgba32> source = pixels.Slice((y0 + Math.Min(y, visibleRows - 1)) * page.Frame.Width + x0, width);
@@ -705,7 +858,7 @@ internal sealed class TiffEncoder : IImageFormatEncoder<TiffEncoderOptions>
         }
 
         /// <summary>Copies <paramref name="source"/> into <paramref name="row"/> and repeats its last pixel to the end.</summary>
-        private static ReadOnlySpan<Rgba32> Pad(ReadOnlySpan<Rgba32> source, Span<Rgba32> row)
+        private static ReadOnlySpan<T> Pad<T>(ReadOnlySpan<T> source, Span<T> row)
         {
             source.CopyTo(row);
             row[source.Length..].Fill(source[^1]);

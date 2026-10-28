@@ -70,7 +70,7 @@ public sealed class MetadataWriteTests
         await Assert.That(EncoderSupport.Tags(file).ContainsKey(34665)).IsFalse();
         using Image oriented = TestSupport.Load(file, TestSupport.Options with { ApplyExifOrientation = true });
         await Assert.That((oriented.Width, oriented.Height)).IsEqualTo((4, 6));
-        await Assert.That(oriented.GetPixelSpan()[3]).IsEqualTo(source.GetPixelSpan()[0]);
+        await Assert.That(oriented.GetPixelSpan<Rgba32>()[3]).IsEqualTo(source.GetPixelSpan<Rgba32>()[0]);
     }
 
     [Test]

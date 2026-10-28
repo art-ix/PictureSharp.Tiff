@@ -1,7 +1,7 @@
 # PictureSharp.Tiff: plan
 
 TIFF plugin for PictureSharp, split out of `PictureSharp.Formats.Extra` (user decision, 2026-10-17). Separate
-repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `PictureSharp` package (minimum 0.7.8) and
+repository and SemVer, like `PictureSharp.Heif`. Depends only on the public `PictureSharp` package (minimum 0.9.0) and
 the BCL; no core code is copied. `System.IO.Compression` is allowed for decompression (2026-10-17) and compression
 (2026-10-21).
 
@@ -36,6 +36,7 @@ released 2026-10-26; 0.8.0 (scope of 1.0) next.**
 | 0.7.1 | Platforms: ARM64, Windows and macOS in CI; NeXT and ThunderScan compression | Released 2026-10-22 |
 | 0.7.2 | Coverage-guided fuzzing campaign, regression corpus | Released 2026-10-23 |
 | 0.7.3 | PictureSharp 0.8.5: `ImageInfo.Color`, `Compression`, `Resolution` from `Identify` | Released 2026-10-26 |
+| 0.7.4 | PictureSharp 0.9.0: 16-bit decoding to `Rgba64` (`PreserveBitDepth`) and 16-bit encoding (`TiffBitDepth`) | Done locally (2026-10-28), waits for PictureSharp 0.9.0 on NuGet; release preparation approved; publish after the core |
 | 0.8.0 | Scope for 1.0: API review and the features 1.0 must have | Planned (user decisions) |
 | 0.9.0 | Release candidate: API frozen, compatibility policy, performance pass | Planned |
 | 1.0.0 | Stable release on a stable core SPI | Planned |
@@ -845,7 +846,7 @@ Decisions for the user before 1.0, each with its cost estimated here first:
   pixels for supported files, byte-identical output for lossless compressions on one runtime).
 - **Reading candidates:** all pages as frames (today one page per call); SubIFDs (tag 330); old-style JPEG (6, see
   Deferred), if 0.7.0 finds it in practice; ICC L\*a\*b\*.
-- **Writing candidates:** 16-bit samples, CMYK, planar output; the ordered pipeline deferred in 0.5.2.
+- **Writing candidates:** CMYK, planar output (16-bit samples completed in 0.7.4); the ordered pipeline deferred in 0.5.2.
 - **Performance:** a faster single-thread LZW decoder (363 against 268 ms for libtiff on 24 MP), which matters for
   throughput on many files.
 - DoD: decisions recorded; the chosen features implemented and released as 0.8.x milestones.
@@ -857,14 +858,35 @@ Decisions for the user before 1.0, each with its cost estimated here first:
 - Compatibility policy written down (README and `docs/`): SemVer for the public API; pixel changes for supported
   files only as bug fixes, called out in release notes; the minimum PictureSharp version and how it moves.
 - Documentation complete and checked against the code; benchmark rerun and documented.
-- Depends on the core: 1.0 builds on the core release whose plugin SPI is declared stable (the core is 0.7.x; its
-  0.8.0 changes the SPI). Request in the core `plan.md` a statement of which SPI members are stable.
+- Depends on the core: 1.0 builds on the core release whose plugin SPI is declared stable (the core is 0.9.0 and has changed the SPI for 16-bit images). Request in the core `plan.md` a statement of which SPI members are stable.
 - DoD: a release candidate on NuGet (0.9.0 or 1.0.0-rc.1), no open issues from 0.7.x.
 
 ### 1.0.0 — stable
 
 - The release candidate unchanged except fixes; release notes summarise the support matrix and the guarantees.
 - DoD: all gates of 0.7.0–0.9.0 green; tag, GitHub Release, NuGet.
+
+## 0.7.4 — 16-bit images (PictureSharp 0.9.0)
+
+Release 0.7.4 selected and preparation approved by the user (2026-10-28). Implementation and local verification complete. Current local core package: 4220/4220 Release tests; full trimming and linux-x64 Native AOT
+consumer: 322 corpus decodes with no mismatches, plus exact 65536-level RGBA ramps through LZW and Deflate.
+Release notes: docs/releases/release-0.7.4.md. Publish after PictureSharp 0.9.0.
+The existing 0.8.0 API review and 1.0 scope remain the next milestone, outside this compatibility release.
+
+The core stores 16 bits per channel from 0.9.0 (`PixelType.Rgba64`, `DecoderOptions.PreserveBitDepth`,
+`ImageDecodeContext.ReservePixels(width, height, PixelType)`, `IImageFormatEncoder.SupportsPixelType`); plugins built
+against an older core are rejected, so the minimum PictureSharp version is 0.9.0.
+
+- Decoding: with `PreserveBitDepth`, layouts with more than 8 bits per sample (integer 9–16 and 32 bits, signed or not,
+  float, 16-bit CMYK and L*a*b*; not palette) decode to `Rgba64` with one rounding (docs/decoding.md, "16-bit images").
+  Reservation charges the resolved type.
+- Encoding: `TiffEncoderOptions.BitDepth` (`TiffBitDepth { Auto, UpTo8, Sixteen }`, as the core's `PngBitDepth`): 16-bit
+  grey/grey+alpha/RGB/RGBA with every lossless compression and the horizontal predictor (`horDiff16`); `Auto` writes
+  exact 8-bit content with 8 bits and rounds for JPEG, WebP and Group 4; palette and black and white at 16 bits throw.
+- DoD: corpus decoded with `PreserveBitDepth` within one level of the 8-bit decode (exact for straight 16-bit grey/RGB;
+  L*a*b* within libtiff's table error), synthetic 12/16/32-bit, planar, big-endian and associated-alpha files against
+  the documented rules, round trips of every colour type and compression, a 65536-level ramp, depth choices and errors;
+  ImageMagick Q16 as an independent reader of the corpus and of written files (Oracle); API snapshot.
 
 ## Core requests
 

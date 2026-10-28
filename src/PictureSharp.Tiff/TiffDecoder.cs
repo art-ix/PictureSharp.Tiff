@@ -6,7 +6,8 @@ namespace PictureSharp.Formats.Tiff;
 /// <summary>
 /// Decodes one full-resolution page of a TIFF file, the first unless <see cref="TiffDecoderOptions"/> selects another:
 /// strips or tiles, contiguous or planar samples, every supported compression and colour model.
-/// Pixel rounding is described on <see cref="TiffColorConverter"/>.
+/// Pixel rounding is described on <see cref="TiffColorConverter"/>. With <see cref="DecoderOptions.PreserveBitDepth"/>,
+/// samples of more than 8 bits (<see cref="TiffLayout.HasDeepSamples"/>) decode to <see cref="PixelType.Rgba64"/>.
 /// </summary>
 internal sealed class TiffDecoder : IImageFormatDecoder
 {
@@ -82,12 +83,13 @@ internal sealed class TiffDecoder : IImageFormatDecoder
         var file = TiffFile.Open(bytes, Page(context.Options), countPages: false);
         TiffLayout layout = TiffLayout.Read(bytes, file.Image);
         layout.EnsureDecodable();
-        context.ReservePixels(layout.Width, layout.Height);
+        PixelType pixelType = context.Options.PreserveBitDepth && layout.HasDeepSamples ? PixelType.Rgba64 : PixelType.Rgba32;
+        context.ReservePixels(layout.Width, layout.Height, pixelType);
 
-        var image = new Image(layout.Width, layout.Height);
+        var image = new Image(layout.Width, layout.Height, pixelType);
         try
         {
-            TiffPixelDecoder.Decode(data, file.Image, layout, image.GetPixelMemory(), context);
+            TiffPixelDecoder.Decode(data, file.Image, layout, image, context);
             TiffMetadataReader.Read(bytes, file.Image, image.Metadata, context);
             return image;
         }

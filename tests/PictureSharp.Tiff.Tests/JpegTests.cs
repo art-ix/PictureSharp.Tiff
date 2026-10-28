@@ -25,14 +25,14 @@ public sealed class JpegTests
         JpegEntry entry = Index[name];
         using Image image = TestSupport.Load(TestSupport.ReadCorpus(name));
         await Assert.That((image.Width, image.Height)).IsEqualTo((entry.Width, entry.Height));
-        Rgba32[] pixels = image.GetPixelSpan().ToArray();
+        Rgba32[] pixels = image.GetPixelSpan<Rgba32>().ToArray();
         int mismatches = 0;
         foreach (JsonElement[] chunk in entry.Chunks)
         {
             (string file, int x0, int y0, int w, int h) = (chunk[0].GetString()!, chunk[1].GetInt32(), chunk[2].GetInt32(), chunk[3].GetInt32(), chunk[4].GetInt32());
             // CMYK strips hold ink amounts; a standalone JPEG decoder assumes Adobe's inverted values unless told.
             using Image jpeg = TestSupport.Load(TestSupport.ReadCorpus(file), entry.Cmyk ? PlainCmyk : null);
-            Rgba32[] decoded = jpeg.GetPixelSpan().ToArray();
+            Rgba32[] decoded = jpeg.GetPixelSpan<Rgba32>().ToArray();
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
@@ -52,7 +52,7 @@ public sealed class JpegTests
         JpegEntry entry = Index[name];
         using Image image = TestSupport.Load(TestSupport.ReadCorpus(name));
         using Image pillow = TestSupport.Load(TestSupport.ReadCorpus(entry.Pillow));
-        ReadOnlySpan<Rgba32> a = image.GetPixelSpan(), b = pillow.GetPixelSpan();
+        ReadOnlySpan<Rgba32> a = image.GetPixelSpan<Rgba32>(), b = pillow.GetPixelSpan<Rgba32>();
         long total = 0;
         int worst = 0;
         for (int i = 0; i < a.Length; i++)

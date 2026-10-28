@@ -30,7 +30,7 @@ public sealed class LayoutTests
             await Assert.That(tags.ContainsKey(322) && !tags.ContainsKey(273) && !tags.ContainsKey(278)).IsTrue();
             await Assert.That(tags[324].Count).IsEqualTo((uint)(((source.Width + tile - 1) / tile) * ((source.Height + tile - 1) / tile)));
             using Image image = TestSupport.Load(file);
-            await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
+            await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, decoded)));
         }
     }
 
@@ -43,7 +43,7 @@ public sealed class LayoutTests
         using Image source = EncoderSupport.Bilevel(61, 40, noise: true);
         byte[] file = source.ToTiff(EncoderSupport.Options(compression: compression) with { TileSize = 16 });
         using Image image = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
         await Assert.That(EncoderSupport.Tags(file)[258].Value).IsEqualTo(1u);
     }
 
@@ -53,7 +53,7 @@ public sealed class LayoutTests
         using Image source = EncoderSupport.Pattern(70, 41, alpha: true);
         byte[] file = source.ToTiff(EncoderSupport.Options(compression: TiffCompression.WebP) with { TileSize = 32, WebPLossless = true });
         using Image image = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
         await Assert.That(EncoderSupport.StripsMatch(file, image)).IsTrue();
     }
 
@@ -114,7 +114,7 @@ public sealed class LayoutTests
         await Assert.That(BinaryPrimitives.ReadUInt64LittleEndian(file.AsSpan(8)) % 2).IsEqualTo(0ul);
         using Image image = TestSupport.Load(file);
         using Image classic = TestSupport.Load(source.ToTiff(options with { Container = TiffContainer.Classic }));
-        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(classic.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(classic.GetPixelSpan<Rgba32>()));
         await Assert.That(image.Metadata.IccProfile!.SequenceEqual(source.Metadata.IccProfile)).IsTrue();
         await Assert.That(image.Metadata.Exif).IsNotNull();
     }
@@ -140,7 +140,7 @@ public sealed class LayoutTests
         {
             using Image image = TestSupport.Load(file, TestSupport.Page(page));
             using Image frame = source.Frames.CloneFrame(page);
-            await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(frame, decoded[page])));
+            await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(frame, decoded[page])));
             await Assert.That(image.Metadata.IccProfile!.SequenceEqual(source.Metadata.IccProfile!)).IsTrue();
             await Assert.That(image.Metadata.HorizontalResolution).IsEqualTo(300f);
         }
@@ -165,7 +165,7 @@ public sealed class LayoutTests
             {
                 using Image expected = TestSupport.Load(classic, TestSupport.Page(page));
                 using Image image = TestSupport.Load(file, TestSupport.Page(page));
-                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(expected.GetPixelSpan()));
+                await Assert.That(EncoderSupport.Sha256(image.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(expected.GetPixelSpan<Rgba32>()));
             }
         }
     }
@@ -249,7 +249,7 @@ public sealed class LayoutTests
 
     private static double Psnr(Image a, Image b)
     {
-        ReadOnlySpan<Rgba32> x = a.GetPixelSpan(), y = b.GetPixelSpan();
+        ReadOnlySpan<Rgba32> x = a.GetPixelSpan<Rgba32>(), y = b.GetPixelSpan<Rgba32>();
         double sum = 0;
         for (int i = 0; i < x.Length; i++)
         {

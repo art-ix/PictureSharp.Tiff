@@ -19,6 +19,10 @@ internal abstract class TiffChunkConverter
     /// <c>r * stride</c> in <paramref name="pixels"/>.
     /// </summary>
     public abstract void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba32> pixels, int stride);
+
+    /// <summary>The same conversion to 16-bit pixels, for layouts with <see cref="TiffLayout.HasDeepSamples"/>.</summary>
+    public virtual void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba64> pixels, int stride) =>
+        throw new System.Diagnostics.UnreachableException("Only samples of more than 8 bits decode to Rgba64.");
 }
 
 /// <summary>
@@ -88,19 +92,66 @@ internal sealed class IntegerChunkConverter(ReadOnlySpan<byte> data, TiffDirecto
     {
         for (int r = 0; r < rows; r++)
         {
-            if (layout.Separate)
+            UnpackRow(chunk, planeBytes, width, r, spp, bits, samples);
+            colors.Convert(samples.AsSpan(0, width * spp), pixels.Slice(r * stride, width));
+        }
+    }
+
+    /// <summary>Samples of 9 to 16 or 32 bits into 16-bit pixels, unpacked as for 8-bit pixels.</summary>
+    public override void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba64> pixels, int stride)
+    {
+        int spp = layout.SamplesPerPixel, bits = layout.BitsPerSample;
+        if (bits == 32)
+        {
+            uint[] wide = ArrayPool<uint>.Shared.Rent(width * spp);
+            try
             {
-                for (int p = 0; p < spp; p++)
+                for (int r = 0; r < rows; r++)
                 {
-                    Unpack(chunk.Slice(p * planeBytes + r * rowBytes, rowBytes), width, bits, samples, p, spp);
+                    for (int p = 0; p < layout.Planes; p++)
+                    {
+                        int count = layout.Separate ? width : width * spp;
+                        Unpack32(chunk.Slice(p * planeBytes + r * rowBytes, rowBytes), count, wide, p, layout.Separate ? spp : 1);
+                    }
+
+                    colors.Convert(wide.AsSpan(0, width * spp), pixels.Slice(r * stride, width));
                 }
             }
-            else
+            finally
             {
-                Unpack(chunk.Slice(r * rowBytes, rowBytes), width * spp, bits, samples, 0, 1);
+                ArrayPool<uint>.Shared.Return(wide);
             }
 
-            colors.Convert(samples.AsSpan(0, width * spp), pixels.Slice(r * stride, width));
+            return;
+        }
+
+        ushort[] samples = ArrayPool<ushort>.Shared.Rent(width * spp);
+        try
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                UnpackRow(chunk, planeBytes, width, r, spp, bits, samples);
+                colors.Convert(samples.AsSpan(0, width * spp), pixels.Slice(r * stride, width));
+            }
+        }
+        finally
+        {
+            ArrayPool<ushort>.Shared.Return(samples);
+        }
+    }
+
+    private void UnpackRow(ReadOnlySpan<byte> chunk, int planeBytes, int width, int r, int spp, int bits, ushort[] samples)
+    {
+        if (layout.Separate)
+        {
+            for (int p = 0; p < spp; p++)
+            {
+                Unpack(chunk.Slice(p * planeBytes + r * rowBytes, rowBytes), width, bits, samples, p, spp);
+            }
+        }
+        else
+        {
+            Unpack(chunk.Slice(r * rowBytes, rowBytes), width * spp, bits, samples, 0, 1);
         }
     }
 
@@ -160,7 +211,8 @@ internal sealed class IntegerChunkConverter(ReadOnlySpan<byte> data, TiffDirecto
 /// IEEE samples of 16, 32 or 64 bits, greyscale or RGB with optional alpha. Values are clamped to [0, 1] and become
 /// <c>(int)(v * 255 + 0.5)</c>, in single precision for 16- and 32-bit samples (a half converts to a float exactly)
 /// and in double precision for 64-bit ones; NaN becomes 0. Premultiplied colour is divided by alpha first (0 where
-/// alpha is not positive). After predictor 3 the samples are big-endian, as the predictor reassembles them.
+/// alpha is not positive). After predictor 3 the samples are big-endian, as the predictor reassembles them. 16-bit pixels
+/// get <c>(int)(v * 65535 + 0.5)</c> in the same precision.
 /// </summary>
 internal sealed class FloatChunkConverter(TiffLayout layout, bool fileBigEndian) : TiffChunkConverter
 {
@@ -211,6 +263,49 @@ internal sealed class FloatChunkConverter(TiffLayout layout, bool fileBigEndian)
         }
     }
 
+    public override void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba64> pixels, int stride)
+    {
+        int alpha = layout.AlphaSample;
+        bool rgb = layout.Photometric == TiffLayout.Rgb, invert = layout.Photometric == TiffLayout.WhiteIsZero;
+        for (int r = 0; r < rows; r++)
+        {
+            Span<Rgba64> row = pixels.Slice(r * stride, width);
+            for (int x = 0; x < width; x++)
+            {
+                if (size == 8)
+                {
+                    double a = alpha >= 0 ? Wide(chunk, planeBytes, r, x, alpha) : 1d;
+                    if (rgb)
+                    {
+                        row[x] = new Rgba64(Color16(Wide(chunk, planeBytes, r, x, 0), a), Color16(Wide(chunk, planeBytes, r, x, 1), a),
+                            Color16(Wide(chunk, planeBytes, r, x, 2), a), To16(a));
+                    }
+                    else
+                    {
+                        double v = Wide(chunk, planeBytes, r, x, 0);
+                        ushort g = Color16(invert ? 1d - v : v, a);
+                        row[x] = new Rgba64(g, g, g, To16(a));
+                    }
+                }
+                else
+                {
+                    float a = alpha >= 0 ? Narrow(chunk, planeBytes, r, x, alpha) : 1f;
+                    if (rgb)
+                    {
+                        row[x] = new Rgba64(Color16(Narrow(chunk, planeBytes, r, x, 0), a), Color16(Narrow(chunk, planeBytes, r, x, 1), a),
+                            Color16(Narrow(chunk, planeBytes, r, x, 2), a), To16(a));
+                    }
+                    else
+                    {
+                        float v = Narrow(chunk, planeBytes, r, x, 0);
+                        ushort g = Color16(invert ? 1f - v : v, a);
+                        row[x] = new Rgba64(g, g, g, To16(a));
+                    }
+                }
+            }
+        }
+    }
+
     private ReadOnlySpan<byte> Bytes(ReadOnlySpan<byte> chunk, int planeBytes, int r, int x, int s) =>
         chunk.Slice(layout.Separate ? s * planeBytes + r * rowBytes + x * size : r * rowBytes + (x * layout.SamplesPerPixel + s) * size, size);
 
@@ -234,7 +329,17 @@ internal sealed class FloatChunkConverter(TiffLayout layout, bool fileBigEndian)
     private byte Color(double v, double a) =>
         To8(!layout.Associated || a == 1d ? v : a > 0 ? v / a : 0d);
 
+    private ushort Color16(float v, float a) =>
+        To16(!layout.Associated || a == 1f ? v : a > 0 ? v / a : 0f);
+
+    private ushort Color16(double v, double a) =>
+        To16(!layout.Associated || a == 1d ? v : a > 0 ? v / a : 0d);
+
     private static byte To8(float v) => !(v > 0f) ? (byte)0 : v >= 1f ? (byte)255 : (byte)(int)(v * 255f + 0.5f);
+
+    private static ushort To16(float v) => !(v > 0f) ? (ushort)0 : v >= 1f ? ushort.MaxValue : (ushort)(int)(v * 65535f + 0.5f);
+
+    private static ushort To16(double v) => !(v > 0d) ? (ushort)0 : v >= 1d ? ushort.MaxValue : (ushort)(int)(v * 65535d + 0.5d);
 
     private static byte To8(double v) => !(v > 0d) ? (byte)0 : v >= 1d ? (byte)255 : (byte)(int)(v * 255d + 0.5d);
 }
@@ -275,7 +380,10 @@ internal sealed class YCbCrChunkConverter(ReadOnlySpan<byte> data, TiffDirectory
     }
 }
 
-/// <summary>8- or 16-bit contiguous CIE L*a*b* (photometric 8) through libtiff's conversion, <see cref="CieLabToRgb"/>.</summary>
+/// <summary>
+/// 8- or 16-bit contiguous CIE L*a*b* (photometric 8) through libtiff's conversion, <see cref="CieLabToRgb"/>; 16-bit
+/// samples convert to 16-bit pixels with a continuous transfer curve.
+/// </summary>
 // port: libtiff/tif_getimage.c putcontig8bitCIELab8 and putcontig8bitCIELab16.
 internal sealed class CieLabChunkConverter(ReadOnlySpan<byte> data, TiffDirectory ifd, TiffLayout layout) : TiffChunkConverter
 {
@@ -302,6 +410,19 @@ internal sealed class CieLabChunkConverter(ReadOnlySpan<byte> data, TiffDirector
                 {
                     output[x] = lab.Convert16(Read(row[s..]), (short)Read(row[(s + 2)..]), (short)Read(row[(s + 4)..]));
                 }
+            }
+        }
+    }
+
+    public override void Convert(ReadOnlySpan<byte> chunk, int planeBytes, int width, int rows, Span<Rgba64> pixels, int stride)
+    {
+        for (int r = 0; r < rows; r++)
+        {
+            ReadOnlySpan<byte> row = chunk.Slice(r * rowBytes, rowBytes);
+            Span<Rgba64> output = pixels.Slice(r * stride, width);
+            for (int x = 0, s = 0; x < width; x++, s += 6)
+            {
+                output[x] = lab.Convert16Wide(Read(row[s..]), (short)Read(row[(s + 2)..]), (short)Read(row[(s + 4)..]));
             }
         }
     }

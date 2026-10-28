@@ -61,7 +61,7 @@ public sealed class ParallelDecodingTests
         await Assert.That(Outcome(data, -1)).IsEqualTo(expected);
         await Assert.That(Outcome(data, Threads)).IsEqualTo(expected);
         using Image decoded = Image.Load(data, TestSupport.Options with { MaxDegreeOfParallelism = -1 });
-        await Assert.That(decoded.GetPixelSpan().SequenceEqual(source.GetPixelSpan())).IsTrue();
+        await Assert.That(decoded.GetPixelSpan<Rgba32>().SequenceEqual(source.GetPixelSpan<Rgba32>())).IsTrue();
     }
 
     [Test]

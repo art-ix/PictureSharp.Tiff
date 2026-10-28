@@ -58,6 +58,35 @@ internal static class TiffPixelScan
         return (allOpaque, allGray, allBilevel);
     }
 
+    /// <summary>Whether every 16-bit pixel is opaque, and whether every one has R = G = B.</summary>
+    public static (bool Opaque, bool Gray) Scan(ReadOnlySpan<Rgba64> pixels)
+    {
+        (bool opaque, bool gray) = (true, true);
+        for (int i = 0; i < pixels.Length && (opaque || gray); i++)
+        {
+            Rgba64 p = pixels[i];
+            opaque &= p.A == ushort.MaxValue;
+            gray &= p.R == p.G && p.G == p.B;
+        }
+
+        return (opaque, gray);
+    }
+
+    /// <summary>
+    /// Whether every sample is an exact 8-bit value, a multiple of 257: its high and low bytes are equal. Each 64-bit
+    /// word holds four whole samples in either byte order.
+    /// </summary>
+    public static bool IsExact8(ReadOnlySpan<Rgba64> pixels)
+    {
+        ulong difference = 0;
+        foreach (ulong word in MemoryMarshal.Cast<Rgba64, ulong>(pixels))
+        {
+            difference |= (word ^ (word >> 8)) & 0x00FF00FF00FF00FFul;
+        }
+
+        return difference == 0;
+    }
+
     private static bool Stopped(bool opaque, bool gray, bool allOpaque, bool allGray) =>
         (!opaque || !allOpaque) && (!gray || !allGray);
 }

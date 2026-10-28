@@ -12,7 +12,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/art-ix/PictureSharp.Tiff</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>0.7.2: fixes from coverage-guided fuzzing: a crafted WebP strip could crash the process through endless recursion; Image.EditMetadata no longer changes pixels or pages of damaged files; earlier files decode unchanged. Requires PictureSharp 0.7.10. Notes: https://github.com/art-ix/PictureSharp.Tiff/blob/v0.7.2/docs/releases/release-0.7.2.md</PackageReleaseNotes>
+    <PackageReleaseNotes>0.7.4: 16-bit images on PictureSharp 0.9.0: with DecoderOptions.PreserveBitDepth, samples of more than 8 bits decode to PixelType.Rgba64; 16-bit images are written with 16-bit grey or RGB samples (TiffEncoderOptions.BitDepth). 8-bit decoding and encoding are unchanged. Requires PictureSharp 0.9.0.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

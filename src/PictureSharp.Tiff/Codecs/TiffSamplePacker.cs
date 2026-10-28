@@ -4,7 +4,8 @@ namespace PictureSharp.Formats.Tiff.Codecs;
 
 /// <summary>
 /// Turns <see cref="Rgba32"/> rows into contiguous 8-bit TIFF samples: grey (the luminance of colour pixels), grey and
-/// alpha, RGB, RGBA with the straight alpha as unassociated alpha, palette indices, or 1-bit black and white.
+/// alpha, RGB, RGBA with the straight alpha as unassociated alpha, palette indices, or 1-bit black and white; and
+/// <see cref="Rgba64"/> rows into the same layouts (without palette and black and white) of little-endian 16-bit samples.
 /// </summary>
 internal static class TiffSamplePacker
 {
@@ -43,6 +44,47 @@ internal static class TiffSamplePacker
             default:
                 MemoryMarshal.AsBytes(row).CopyTo(samples);
                 break;
+        }
+    }
+
+    public static void Pack(ReadOnlySpan<Rgba64> row, Span<byte> samples, int samplesPerPixel)
+    {
+        Span<ushort> words = MemoryMarshal.Cast<byte, ushort>(samples[..(row.Length * samplesPerPixel * 2)]);
+        switch (samplesPerPixel)
+        {
+            case 1:
+                for (int i = 0; i < row.Length; i++)
+                {
+                    words[i] = Gray(row[i]);
+                }
+
+                break;
+            case 2:
+                for (int i = 0; i < row.Length; i++)
+                {
+                    words[2 * i] = Gray(row[i]);
+                    words[(2 * i) + 1] = row[i].A;
+                }
+
+                break;
+            case 3:
+                for (int i = 0; i < row.Length; i++)
+                {
+                    Rgba64 p = row[i];
+                    words[3 * i] = p.R;
+                    words[(3 * i) + 1] = p.G;
+                    words[(3 * i) + 2] = p.B;
+                }
+
+                break;
+            default:
+                MemoryMarshal.Cast<Rgba64, ushort>(row).CopyTo(words);
+                break;
+        }
+
+        if (!BitConverter.IsLittleEndian)
+        {
+            System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(words, words);
         }
     }
 
@@ -110,4 +152,8 @@ internal static class TiffSamplePacker
     /// <summary>The grey value of a pixel: itself when R = G = B, otherwise BT.601 luminance as the PNG encoder computes it.</summary>
     public static byte Gray(Rgba32 p) =>
         p.R == p.G && p.G == p.B ? p.R : (byte)(((19595 * p.R) + (38470 * p.G) + (7471 * p.B) + 32768) >> 16);
+
+    /// <summary>The same luminance at 16 bits (the weights sum to 65536, so the sum fits in 32 bits).</summary>
+    public static ushort Gray(Rgba64 p) =>
+        p.R == p.G && p.G == p.B ? p.R : (ushort)(((19595u * p.R) + (38470u * p.G) + (7471u * p.B) + 32768u) >> 16);
 }

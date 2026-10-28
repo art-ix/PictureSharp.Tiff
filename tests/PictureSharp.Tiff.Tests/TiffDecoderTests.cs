@@ -139,7 +139,7 @@ public sealed class TiffDecoderTests
     {
         // Two's complement bytes: -128 becomes 0, -1 becomes 127, 0 becomes 128 and 127 becomes 255.
         using Image image = TestSupport.Load(TiffBuilder.Gray(8, 4).Set(339, TiffBuilder.Short, 2).Build());
-        ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan();
+        ReadOnlySpan<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
         for (int i = 0; i < pixels.Length; i++)
         {
             byte stored = (byte)(i * 7);
@@ -176,7 +176,7 @@ public sealed class TiffDecoderTests
         byte[] data = TiffBuilder.Gray(8, 4).Build(next: self => self);
         using Image image = TestSupport.Load(data);
         await Assert.That(TestSupport.Identify(data).ContainerItemCount).IsEqualTo(1);
-        await Assert.That(image.GetPixelSpan()[9]).IsEqualTo(new Rgba32(63, 63, 63));
+        await Assert.That(image.GetPixelSpan<Rgba32>()[9]).IsEqualTo(new Rgba32(63, 63, 63));
     }
 
     [Test]
@@ -191,7 +191,7 @@ public sealed class TiffDecoderTests
     {
         byte[] data = TiffBuilder.Gray(8, 4).Set(279, TiffBuilder.Long, 0xFFFF_FFF0).Build();
         using Image image = TestSupport.Load(data);
-        await Assert.That(image.GetPixelSpan()[31]).IsEqualTo(new Rgba32(217, 217, 217));
+        await Assert.That(image.GetPixelSpan<Rgba32>()[31]).IsEqualTo(new Rgba32(217, 217, 217));
     }
 
     [Test]

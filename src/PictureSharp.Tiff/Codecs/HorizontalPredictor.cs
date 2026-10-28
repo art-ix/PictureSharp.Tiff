@@ -78,6 +78,22 @@ internal static class HorizontalPredictor
         }
     }
 
+    /// <summary>Applies the differencing to little-endian 16-bit samples, row by row; the inverse of <see cref="Decode"/>.</summary>
+    // port: libtiff/tif_predict.c PredictorEncodeTile with horDiff16, on the little-endian samples the encoder writes.
+    public static void Encode16(Span<byte> chunk, int rowBytes, int stride)
+    {
+        for (int start = 0; start < chunk.Length; start += rowBytes)
+        {
+            Span<byte> row = chunk.Slice(start, rowBytes);
+            for (int i = (row.Length / 2) - 1; i >= stride; i--)
+            {
+                Span<byte> current = row.Slice(i * 2, 2);
+                ushort left = BinaryPrimitives.ReadUInt16LittleEndian(row.Slice((i - stride) * 2, 2));
+                BinaryPrimitives.WriteUInt16LittleEndian(current, (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(current) - left));
+            }
+        }
+    }
+
     /// <summary>Applies the differencing to 8-bit samples, row by row; the inverse of <see cref="Decode"/>.</summary>
     // port: libtiff/tif_predict.c PredictorEncodeTile with horDiff8. Each sample loses the original sample to its
     // left, so the row is walked from the end.

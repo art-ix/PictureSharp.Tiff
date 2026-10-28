@@ -26,7 +26,7 @@ internal static class EncoderSupport
     public static Image Pattern(int width, int height, bool gray = false, bool alpha = false, bool posterize = false)
     {
         var image = new Image(width, height);
-        Span<Rgba32> pixels = image.GetPixelSpan();
+        Span<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -53,7 +53,7 @@ internal static class EncoderSupport
     {
         var image = new Image(width, height);
         var random = new Random(width + height);
-        Span<Rgba32> pixels = image.GetPixelSpan();
+        Span<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -81,7 +81,7 @@ internal static class EncoderSupport
     {
         var image = new Image(width, height);
         var random = new Random(width * height);
-        Span<Rgba32> pixels = image.GetPixelSpan();
+        Span<Rgba32> pixels = image.GetPixelSpan<Rgba32>();
         for (int i = 0; i < pixels.Length; i++)
         {
             byte r = (byte)random.Next(256), g = (byte)random.Next(256), b = (byte)random.Next(256);
@@ -94,7 +94,7 @@ internal static class EncoderSupport
     /// <summary>The pixels a file written with <paramref name="colorType"/> (not Auto) decodes to.</summary>
     public static Rgba32[] Expected(Image source, TiffColorType colorType)
     {
-        Rgba32[] pixels = source.GetPixelSpan().ToArray();
+        Rgba32[] pixels = source.GetPixelSpan<Rgba32>().ToArray();
         for (int i = 0; i < pixels.Length; i++)
         {
             Rgba32 p = pixels[i];
@@ -160,7 +160,7 @@ internal static class EncoderSupport
 
             for (int y = 0; y < rows; y++)
             {
-                if (!part.GetPixelSpan().Slice(y * part.Width, width).SequenceEqual(image.GetPixelSpan().Slice(((y0 + y) * image.Width) + x0, width)))
+                if (!part.GetPixelSpan<Rgba32>().Slice(y * part.Width, width).SequenceEqual(image.GetPixelSpan<Rgba32>().Slice(((y0 + y) * image.Width) + x0, width)))
                 {
                     return false;
                 }

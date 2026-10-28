@@ -50,7 +50,7 @@ public sealed class EncoderTests
         byte[] file = source.ToTiff(EncoderSupport.Options(colorType, rowsPerStrip, compression, predictor));
         using Image decoded = TestSupport.Load(file);
         await Assert.That((decoded.Width, decoded.Height)).IsEqualTo((width, height));
-        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, colorType)));
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, colorType)));
 
         var tags = EncoderSupport.Tags(file);
         int expectedRows = rowsPerStrip == 0 ? height : Math.Min(rowsPerStrip, height);
@@ -68,15 +68,15 @@ public sealed class EncoderTests
         // Noise fills the LZW table many times over and forces resets; a single colour gives the longest runs.
         using var noise = new Image(1000, 300);
         var random = new Random(42);
-        random.NextBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(noise.GetPixelSpan()));
+        random.NextBytes(System.Runtime.InteropServices.MemoryMarshal.AsBytes(noise.GetPixelSpan<Rgba32>()));
         using var flat = new Image(3000, 300);
-        flat.GetPixelSpan().Fill(new Rgba32(77, 77, 77, 77));
+        flat.GetPixelSpan<Rgba32>().Fill(new Rgba32(77, 77, 77, 77));
         foreach (Image source in new[] { noise, flat })
         {
             TiffEncoderOptions options = EncoderSupport.Options(TiffColorType.Rgba, compression: compression, predictor: TiffPredictor.None) with { RowsPerStrip = 300 };
             byte[] file = source.ToTiff(options);
             using Image decoded = TestSupport.Load(file);
-            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
             long raw = source.Width * source.Height * 4L;
             long stored = EncoderSupport.Tags(file)[279].Value;
             await Assert.That(stored).IsLessThan(source == flat ? raw / 50 : raw + (raw / 2));
@@ -98,7 +98,7 @@ public sealed class EncoderTests
         {
             byte[] file = source.ToTiff(EncoderSupport.Options(TiffColorType.BlackWhite, compression: compression));
             using Image decoded = TestSupport.Load(file);
-            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+            await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
             var tags = EncoderSupport.Tags(file);
             await Assert.That((tags[258].Value, tags[262].Value)).IsEqualTo((1u, 0u));
         }
@@ -116,7 +116,7 @@ public sealed class EncoderTests
         await Assert.That((tags[258].Value, tags[262].Value, tags[317].Value)).IsEqualTo((8u, 1u, 2u));
 
         // One grey pixel keeps it grey.
-        source.GetPixelSpan()[5] = new Rgba32(128, 128, 128, 255);
+        source.GetPixelSpan<Rgba32>()[5] = new Rgba32(128, 128, 128, 255);
         tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options()));
         await Assert.That(tags[258].Value).IsEqualTo(8u);
     }
@@ -129,7 +129,7 @@ public sealed class EncoderTests
         var tags = EncoderSupport.Tags(file);
         await Assert.That((tags[258].Value, tags[259].Value, tags[262].Value, tags.ContainsKey(338))).IsEqualTo((1u, 4u, 0u, false));
         using Image decoded = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite)));
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(EncoderSupport.Expected(source, TiffColorType.BlackWhite)));
     }
 
     [Test]
@@ -173,7 +173,7 @@ public sealed class EncoderTests
         TiffColorType colorType = gray ? TiffColorType.Auto : TiffColorType.Rgb;
         if (!gray)
         {
-            Span<Rgba32> pixels = source.GetPixelSpan();
+            Span<Rgba32> pixels = source.GetPixelSpan<Rgba32>();
             for (int i = 0; i < (height / 2) * width; i++)
             {
                 pixels[i] = pixels[i] with { G = pixels[i].R, B = pixels[i].R };
@@ -183,7 +183,7 @@ public sealed class EncoderTests
         byte[] file = source.ToTiff(EncoderSupport.Options(colorType, rowsPerStrip, TiffCompression.Jpeg) with { JpegSubsampling = subsampling });
         using Image decoded = TestSupport.Load(file);
         await Assert.That(EncoderSupport.JpegStripsMatch(file, decoded, gray ? 1 : 3)).IsTrue();
-        await Assert.That(decoded.GetPixelSpan().ToArray().All(p => p.A == 255)).IsTrue();
+        await Assert.That(decoded.GetPixelSpan<Rgba32>().ToArray().All(p => p.A == 255)).IsTrue();
 
         var tags = EncoderSupport.Tags(file);
         int block = !gray && subsampling is JpegSubsampling.Ratio420 or JpegSubsampling.Ratio440 ? 16 : 8;
@@ -245,14 +245,14 @@ public sealed class EncoderTests
         await Assert.That(tags.ContainsKey(320)).IsEqualTo(palette);
         await Assert.That(tags.ContainsKey(317)).IsEqualTo(!palette);
         using Image decoded = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
     }
 
     [Test]
     public async Task Auto_KeepsRgbForMoreThan256Colours()
     {
         using Image source = EncoderSupport.Pattern(300, 4);
-        source.GetPixelSpan()[0] = new Rgba32(1, 2, 3, 255);
+        source.GetPixelSpan<Rgba32>()[0] = new Rgba32(1, 2, 3, 255);
         var tags = EncoderSupport.Tags(source.ToTiff(EncoderSupport.Options()));
         await Assert.That(tags[262].Value).IsEqualTo(2u);
     }
@@ -287,7 +287,7 @@ public sealed class EncoderTests
         await Assert.That(tags[262].Value).IsEqualTo((uint)photometric);
         await Assert.That(tags.ContainsKey(338)).IsEqualTo(alpha);
         using Image decoded = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
     }
 
     /// <summary>Image lengths around vector widths and the scan's 4096-pixel blocks, with positions for one odd pixel.</summary>
@@ -458,7 +458,7 @@ public sealed class EncoderTests
         source.Frames.AddClone(second.Frames[0]);
         byte[] file = source.ToTiff(EncoderSupport.Options() with { SaveAllPages = false });
         using Image decoded = TestSupport.Load(file);
-        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan()));
+        await Assert.That(EncoderSupport.Sha256(decoded.GetPixelSpan<Rgba32>())).IsEqualTo(EncoderSupport.Sha256(source.GetPixelSpan<Rgba32>()));
         await Assert.That(TestSupport.Identify(file).ContainerItemCount).IsEqualTo(1);
         using Image first = EncoderSupport.Pattern(6, 4);
         await Assert.That(file.AsSpan().SequenceEqual(first.ToTiff(EncoderSupport.Options()))).IsTrue();

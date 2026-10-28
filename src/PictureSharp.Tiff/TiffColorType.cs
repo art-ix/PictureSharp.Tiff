@@ -1,13 +1,17 @@
 namespace PictureSharp.Formats.Tiff;
 
-/// <summary>The samples the TIFF encoder writes: 8 bits per sample, or 1 bit for <see cref="BlackWhite"/>.</summary>
+/// <summary>
+/// The samples the TIFF encoder writes: 8 bits per sample (16 with <see cref="TiffBitDepth.Sixteen"/> or a 16-bit
+/// image), or 1 bit for <see cref="BlackWhite"/>.
+/// </summary>
 public enum TiffColorType
 {
     /// <summary>
     /// Choose the smallest lossless representation: black and white when every pixel is opaque black or white;
     /// greyscale (with alpha only when a pixel is not opaque) when every pixel has R = G = B; otherwise a palette when the image is opaque, has at most 256 colours and more than 768
     /// pixels (a smaller image is smaller as RGB than with the 1.5 KiB colour map); otherwise RGB or RGBA. With
-    /// <see cref="TiffCompression.CcittGroup4"/>, always <see cref="BlackWhite"/>.
+    /// <see cref="TiffCompression.CcittGroup4"/>, always <see cref="BlackWhite"/>. With 16-bit samples, greyscale or RGB,
+    /// with alpha only when a pixel is not opaque.
     /// </summary>
     Auto,
 

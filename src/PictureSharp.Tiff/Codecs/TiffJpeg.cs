@@ -47,7 +47,7 @@ internal sealed class TiffJpeg
     public void Decode(ReadOnlyMemory<byte> raw, ImageDecodeContext context, int width, int rows, Span<Rgba32> pixels, int stride)
     {
         using Image image = DecodeStream(raw, context, width, rows, planar: false);
-        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan();
+        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan<Rgba32>();
         for (int r = 0; r < rows; r++)
         {
             decoded.Slice(r * image.Width, width).CopyTo(pixels.Slice(r * stride, width));
@@ -63,7 +63,7 @@ internal sealed class TiffJpeg
     public void DecodePlane(ReadOnlyMemory<byte> raw, ImageDecodeContext context, int width, int rows, Span<byte> plane)
     {
         using Image image = DecodeStream(raw, context, width, rows, planar: true);
-        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan();
+        ReadOnlySpan<Rgba32> decoded = image.GetPixelSpan<Rgba32>();
         for (int r = 0; r < rows; r++)
         {
             ReadOnlySpan<Rgba32> source = decoded.Slice(r * image.Width, width);
